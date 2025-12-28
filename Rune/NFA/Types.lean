@@ -15,6 +15,8 @@ inductive TransLabel where
   | char (c : Char)                -- Single character
   | charClass (bracket : BracketExpr) -- Character class from bracket expression
   | dot                            -- Any character (except newline)
+  | anchorStart                    -- ^ anchor (must be at start of input)
+  | anchorEnd                      -- $ anchor (must be at end of input)
   deriving Repr, BEq, Inhabited
 
 namespace TransLabel
@@ -26,6 +28,15 @@ def test (label : TransLabel) (c : Char) : Bool :=
   | .char x => c == x
   | .charClass br => br.test c
   | .dot => c != '\n'
+  | .anchorStart => false  -- Anchors never match characters
+  | .anchorEnd => false
+
+/-- Check if this is a zero-width transition (epsilon or anchor) -/
+def isZeroWidth : TransLabel → Bool
+  | .epsilon => true
+  | .anchorStart => true
+  | .anchorEnd => true
+  | _ => false
 
 /-- Check if this is an epsilon transition -/
 def isEpsilon : TransLabel → Bool

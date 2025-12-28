@@ -103,8 +103,17 @@ mutual
       | .nonCapturing =>
         return frag
 
-    | .anchorStart | .anchorEnd =>
-      compileExpr .empty
+    | .anchorStart =>
+      let start ← Compiler.newState
+      let accept ← Compiler.newState
+      Compiler.addTransition start { label := .anchorStart, target := accept }
+      return { start, accept }
+
+    | .anchorEnd =>
+      let start ← Compiler.newState
+      let accept ← Compiler.newState
+      Compiler.addTransition start { label := .anchorEnd, target := accept }
+      return { start, accept }
 
   /-- Compile a quantified expression -/
   partial def compileQuantified (expr : Expr) (q : Quantifier) : Compiler Fragment := do

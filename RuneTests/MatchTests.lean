@@ -143,6 +143,74 @@ test "complex email pattern" := do
   shouldSatisfy (re.test "user@example.com") "should match email"
   shouldSatisfy (!re.test "invalid") "should not match 'invalid'"
 
+-- Anchor tests
+
+test "start anchor basic" := do
+  let re ← compile! "^abc"
+  shouldSatisfy (re.test "abc") "should match 'abc' at start"
+  shouldSatisfy (re.test "abcdef") "should match 'abc' at start of 'abcdef'"
+  shouldSatisfy (!re.test "xabc") "should NOT match 'abc' not at start"
+  shouldSatisfy (!re.test " abc") "should NOT match with leading space"
+
+test "end anchor basic" := do
+  let re ← compile! "abc$"
+  shouldSatisfy (re.test "abc") "should match 'abc' at end"
+  shouldSatisfy (re.test "xyzabc") "should match 'abc' at end of 'xyzabc'"
+  shouldSatisfy (!re.test "abcx") "should NOT match 'abc' not at end"
+  shouldSatisfy (!re.test "abc ") "should NOT match with trailing space"
+
+test "both anchors require full match" := do
+  let re ← compile! "^abc$"
+  shouldSatisfy (re.test "abc") "should match exact 'abc'"
+  shouldSatisfy (!re.test "abcd") "should NOT match 'abcd'"
+  shouldSatisfy (!re.test "xabc") "should NOT match 'xabc'"
+  shouldSatisfy (!re.test " abc ") "should NOT match with spaces"
+
+test "anchors with quantifiers" := do
+  let re ← compile! "^a+$"
+  shouldSatisfy (re.test "a") "should match 'a'"
+  shouldSatisfy (re.test "aaa") "should match 'aaa'"
+  shouldSatisfy (!re.test "ba") "should NOT match 'ba'"
+  shouldSatisfy (!re.test "ab") "should NOT match 'ab'"
+
+test "start anchor with alternation" := do
+  let re ← compile! "^(cat|dog)"
+  shouldSatisfy (re.test "cat") "should match 'cat' at start"
+  shouldSatisfy (re.test "dog") "should match 'dog' at start"
+  shouldSatisfy (!re.test "the cat") "should NOT match 'cat' not at start"
+
+test "end anchor with alternation" := do
+  let re ← compile! "(cat|dog)$"
+  shouldSatisfy (re.test "cat") "should match 'cat' at end"
+  shouldSatisfy (re.test "my dog") "should match 'dog' at end"
+  shouldSatisfy (!re.test "cats") "should NOT match 'cat' not at end"
+
+test "anchors with empty string" := do
+  let reStart ← compile! "^"
+  let reEnd ← compile! "$"
+  let reBoth ← compile! "^$"
+  shouldSatisfy (reStart.test "") "^ should match empty string"
+  shouldSatisfy (reEnd.test "") "$ should match empty string"
+  shouldSatisfy (reBoth.test "") "^$ should match empty string"
+  shouldSatisfy (reStart.test "x") "^ should match any string at start"
+  shouldSatisfy (reEnd.test "x") "$ should match any string at end"
+  shouldSatisfy (!reBoth.test "x") "^$ should NOT match non-empty string"
+
+test "anchored findAll" := do
+  let re ← compile! "^hello"
+  let results := re.findAll "hello world hello"
+  -- Only the first "hello" should match because it's at position 0
+  results.length ≡ 1
+  (results[0]?.map (·.text)) ≡ some "hello"
+
+test "end anchored pattern mid-string fails" := do
+  let re ← compile! "world$"
+  let results := re.findAll "world hello world"
+  -- Only the last "world" should match because it's at the end
+  results.length ≡ 1
+  if let some m := results[0]? then
+    m.start ≡ 12  -- Position of the last "world"
+
 #generate_tests
 
 end RuneTests.MatchTests

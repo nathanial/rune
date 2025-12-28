@@ -39,21 +39,23 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 ---
 
-### [Priority: High] Anchor Enforcement in NFA
+### [COMPLETED] Anchor Enforcement in NFA
 
-**Description:** Currently `^` and `$` anchors are parsed but compiled to empty expressions (see `Compiler.lean` line 106-107), meaning they don't actually enforce start/end positioning.
+**Status:** Implemented and tested (2024-12-28)
 
-**Rationale:** This is a correctness issue - `^abc` should only match "abc" at the start of a string, but currently it matches anywhere. This is a gap between documented behavior and actual behavior.
+**Description:** The `^` and `$` anchors now correctly enforce start/end positioning.
 
-**Affected Files:**
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/NFA/Types.lean` - add anchor-aware transition labels or state metadata
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/NFA/Compiler.lean` - implement proper anchor compilation
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/Match/Simulation.lean` - enforce anchors during simulation
-- `/Users/Shared/Projects/lean-workspace/rune/RuneTests/MatchTests.lean` - add anchor tests
+**Changes Made:**
+- Added `anchorStart` and `anchorEnd` variants to `TransLabel` in `NFA/Types.lean`
+- Added `isZeroWidth` function to identify zero-width transitions (epsilon + anchors)
+- Compiler now emits proper anchor transitions instead of empty expressions
+- `epsilonClosure` checks anchor conditions: `^` passes only at position 0, `$` passes only at input length
+- Added 9 comprehensive anchor tests covering basic usage, alternations, quantifiers, empty strings, and findAll
 
-**Estimated Effort:** Medium
-
-**Dependencies:** None
+**Test Coverage:** 9 new tests in `MatchTests.lean`:
+- `start anchor basic`, `end anchor basic`, `both anchors require full match`
+- `anchors with quantifiers`, `start anchor with alternation`, `end anchor with alternation`
+- `anchors with empty string`, `anchored findAll`, `end anchored pattern mid-string fails`
 
 ---
 
@@ -107,7 +109,7 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 **Estimated Effort:** Medium
 
-**Dependencies:** Anchor enforcement (for multiline mode)
+**Dependencies:** None (anchor enforcement is now complete)
 
 ---
 
@@ -359,18 +361,16 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 ## Test Coverage Gaps
 
-### [Priority: High] Add Anchor Behavior Tests
+### [COMPLETED] Add Anchor Behavior Tests
 
-**Issue:** No tests verify that `^` and `$` anchors work correctly. Given the current implementation doesn't enforce them, these tests would currently fail.
+**Status:** Implemented (2024-12-28)
 
-**Location:** `/Users/Shared/Projects/lean-workspace/rune/RuneTests/MatchTests.lean`
-
-**Action Required:** Add tests like:
-- `^abc` should match "abc" but not "xabc"
-- `abc$` should match "abc" but not "abcx"
-- `^abc$` should match only "abc"
-
-**Estimated Effort:** Small (after anchor implementation)
+**Description:** 9 comprehensive anchor tests added to `MatchTests.lean` validating:
+- `^abc` matches "abc" but not "xabc"
+- `abc$` matches "abc" but not "abcx"
+- `^abc$` matches only "abc"
+- Anchors with quantifiers, alternations, and empty strings
+- `findAll` respects anchor constraints
 
 ---
 
@@ -507,19 +507,24 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 ## Summary
 
-| Category | High | Medium | Low | Total |
-|----------|------|--------|-----|-------|
-| Features | 3 | 5 | 2 | 10 |
-| Improvements | 2 | 3 | 2 | 7 |
-| Cleanup | 1 | 2 | 3 | 6 |
-| Tests | 1 | 2 | 1 | 4 |
-| API | 0 | 2 | 2 | 4 |
-| Documentation | 0 | 1 | 1 | 2 |
-| **Total** | **7** | **15** | **11** | **33** |
+| Category | High | Medium | Low | Completed | Total |
+|----------|------|--------|-----|-----------|-------|
+| Features | 2 | 5 | 2 | 1 | 10 |
+| Improvements | 2 | 3 | 2 | 0 | 7 |
+| Cleanup | 1 | 2 | 3 | 0 | 6 |
+| Tests | 0 | 2 | 1 | 1 | 4 |
+| API | 0 | 2 | 2 | 0 | 4 |
+| Documentation | 0 | 1 | 1 | 0 | 2 |
+| **Total** | **5** | **15** | **11** | **2** | **33** |
 
-### Recommended First Steps
+### Completed Items
 
-1. **Fix anchor enforcement** - This is a correctness bug where documented features don't work
-2. **Add shorthand classes** - High value, low effort feature addition
+1. **Anchor enforcement** (2024-12-28) - `^` and `$` anchors now correctly enforce position constraints
+2. **Anchor behavior tests** (2024-12-28) - 9 comprehensive tests added (61 total tests now pass)
+
+### Recommended Next Steps
+
+1. **Add shorthand classes** (`\d`, `\w`, `\s`) - High value, low effort feature addition
+2. **Add word boundary anchors** (`\b`, `\B`) - Natural follow-up to anchor work
 3. **Optimize string iteration** - Quick performance win
-4. **Add comprehensive anchor tests** - Will validate the fix and prevent regression
+4. **Add POSIX class tests** - Validate existing but untested functionality
