@@ -203,18 +203,19 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 ---
 
-### [Priority: High] Use Array Instead of List for Thread Management
+### [COMPLETED] Use Array Instead of List for Thread Management
 
-**Current State:** Thread lists in `epsilonClosure` and `step` use `List` type which has O(n) append and poor cache locality.
+**Status:** Implemented (2024-12-28)
 
-**Proposed Change:** Use `Array Thread` with in-place mutation for better performance.
+**Description:** Converted thread management from `List Thread` to `Array Thread` for better performance.
 
-**Benefits:** Reduced allocations and better cache performance during NFA simulation.
+**Changes Made:**
+- `epsilonClosure`: Now takes and returns `Array Thread`, uses index-based iteration instead of pattern matching
+- `step`: Now takes and returns `Array Thread`, uses `Array.push` instead of list cons
+- `findAcceptingThread`: Updated signature to use `Array Thread`
+- `findMatchAt`: Uses `#[initialThread]` array literal, checks `threads.size == 0`
 
-**Affected Files:**
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/Match/Simulation.lean`
-
-**Estimated Effort:** Small
+**Benefits:** O(1) amortized push, better cache locality, reduced allocations during NFA simulation.
 
 ---
 
@@ -521,12 +522,12 @@ This document tracks potential improvements, new features, and code cleanup oppo
 | Category | High | Medium | Low | Completed | Total |
 |----------|------|--------|-----|-----------|-------|
 | Features | 0 | 5 | 2 | 3 | 10 |
-| Improvements | 1 | 3 | 2 | 1 | 7 |
+| Improvements | 0 | 3 | 2 | 2 | 7 |
 | Cleanup | 1 | 2 | 2 | 1 | 6 |
 | Tests | 0 | 2 | 0 | 2 | 4 |
 | API | 0 | 2 | 2 | 0 | 4 |
 | Documentation | 0 | 1 | 1 | 0 | 2 |
-| **Total** | **2** | **15** | **9** | **6** | **33** |
+| **Total** | **1** | **15** | **9** | **7** | **33** |
 
 ### Completed Items
 
@@ -536,12 +537,13 @@ This document tracks potential improvements, new features, and code cleanup oppo
 4. **Word boundary anchors** (2024-12-28) - `\b` and `\B` implemented with 6 tests
 5. **String iteration optimization** (2024-12-28) - Char array computed once, O(n) findAll
 6. **POSIX class tests** (2024-12-28) - 16 comprehensive tests for all 12 POSIX classes
+7. **Array thread management** (2024-12-28) - Converted from List to Array for O(1) push and better cache locality
 
-**Test count: 90 tests (was 74)**
+**Test count: 90 tests**
 
 ### Recommended Next Steps
 
-1. **Use Array for thread management** - Further performance improvement
-2. **Lazy quantifiers** (`*?`, `+?`) - Commonly needed feature
-3. **Regex flags** (`(?i)`, `(?m)`) - Case-insensitive and multiline modes
-4. **Edge case tests** - Empty groups, nested groups, quantified groups
+1. **Lazy quantifiers** (`*?`, `+?`) - Commonly needed feature
+2. **Regex flags** (`(?i)`, `(?m)`) - Case-insensitive and multiline modes
+3. **Edge case tests** - Empty groups, nested groups, quantified groups
+4. **Pre-compiled character class predicates** - Bitmap/interval lookup for faster matching

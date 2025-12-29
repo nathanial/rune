@@ -39,45 +39,45 @@ def checkAnchor (label : TransLabel) (input : String) (pos : Nat) : Bool :=
   | .nonWordBoundary => !isAtWordBoundary input pos
   | _ => true  -- Non-anchor labels always pass
 
-/-- Compute epsilon closure from a set of threads -/
-partial def epsilonClosure (nfa : NFA) (threads : List Thread) (input : String) (pos : Nat)
-    : List Thread := Id.run do
+/-- Compute epsilon closure from a set of threads (using Array for performance) -/
+partial def epsilonClosure (nfa : NFA) (threads : Array Thread) (input : String) (pos : Nat)
+    : Array Thread := Id.run do
   let mut visited : StateSet := {}
-  let mut result : List Thread := []
+  let mut result : Array Thread := #[]
   let mut worklist := threads
+  let mut idx := 0
 
-  while !worklist.isEmpty do
-    match worklist with
-    | [] => break
-    | thread :: rest =>
-      worklist := rest
-      if visited.contains thread.stateId then
-        continue
-      visited := visited.insert thread.stateId
+  while idx < worklist.size do
+    let thread := worklist[idx]!
+    idx := idx + 1
 
-      match nfa.getState thread.stateId with
-      | none => continue
-      | some state =>
-        -- Process all zero-width transitions (epsilon and anchors)
-        let mut hasCharTransition := false
-        for t in state.transitions do
-          if t.label.isZeroWidth then
-            -- Check anchor conditions before following
-            if checkAnchor t.label input pos then
-              let newThread := thread.applyCaptureOps t.captures pos
-              worklist := { newThread with stateId := t.target } :: worklist
-          else
-            hasCharTransition := true
-        -- If this state has character transitions, add to result
-        if hasCharTransition || state.isAccept then
-          result := thread :: result
+    if visited.contains thread.stateId then
+      continue
+    visited := visited.insert thread.stateId
+
+    match nfa.getState thread.stateId with
+    | none => continue
+    | some state =>
+      -- Process all zero-width transitions (epsilon and anchors)
+      let mut hasCharTransition := false
+      for t in state.transitions do
+        if t.label.isZeroWidth then
+          -- Check anchor conditions before following
+          if checkAnchor t.label input pos then
+            let newThread := thread.applyCaptureOps t.captures pos
+            worklist := worklist.push { newThread with stateId := t.target }
+        else
+          hasCharTransition := true
+      -- If this state has character transitions, add to result
+      if hasCharTransition || state.isAccept then
+        result := result.push thread
 
   result
 
-/-- Advance threads by one character -/
-def step (nfa : NFA) (threads : List Thread) (c : Char) (input : String) (pos : Nat)
-    : List Thread := Id.run do
-  let mut nextThreads : List Thread := []
+/-- Advance threads by one character (using Array for performance) -/
+def step (nfa : NFA) (threads : Array Thread) (c : Char) (input : String) (pos : Nat)
+    : Array Thread := Id.run do
+  let mut nextThreads : Array Thread := #[]
 
   for thread in threads do
     match nfa.getState thread.stateId with
@@ -86,13 +86,13 @@ def step (nfa : NFA) (threads : List Thread) (c : Char) (input : String) (pos : 
       for t in state.transitions do
         if t.label.test c then
           let newThread := thread.applyCaptureOps t.captures pos
-          nextThreads := { newThread with stateId := t.target } :: nextThreads
+          nextThreads := nextThreads.push { newThread with stateId := t.target }
 
   -- Compute epsilon closure of next states
   epsilonClosure nfa nextThreads input (pos + 1)
 
 /-- Check if any thread is in an accept state -/
-def findAcceptingThread (nfa : NFA) (threads : List Thread) : Option Thread :=
+def findAcceptingThread (nfa : NFA) (threads : Array Thread) : Option Thread :=
   threads.find? fun t => nfa.isAcceptState t.stateId
 
 /-- Build a Match from a successful thread -/
@@ -109,7 +109,7 @@ def buildMatch (input : String) (startPos endPos : Nat) (thread : Thread)
 def findMatchAt (nfa : NFA) (input : String) (startPos : Nat) : Option Match := Id.run do
   let initialThread := Thread.initial nfa.start nfa.captureCount
 
-  let mut threads := epsilonClosure nfa [initialThread] input startPos
+  let mut threads := epsilonClosure nfa #[initialThread] input startPos
   let mut lastMatch : Option (Thread × Nat) := none
   let mut pos := startPos
 
@@ -130,7 +130,7 @@ def findMatchAt (nfa : NFA) (input : String) (startPos : Nat) : Option Match := 
     if let some thread := findAcceptingThread nfa threads then
       lastMatch := some (thread, pos)
 
-    if threads.isEmpty then
+    if threads.size == 0 then
       break
 
   -- Build match result from last matching thread
