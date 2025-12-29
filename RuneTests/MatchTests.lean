@@ -658,6 +658,245 @@ test "repeated bracket pattern performance" := do
   shouldSatisfy (re.test "test_123@domain.org") "should match with underscore"
   shouldSatisfy (!re.test "@invalid") "should not match invalid email"
 
+-- ============================================================================
+-- Lazy (Non-Greedy) Quantifier Tests
+-- ============================================================================
+
+test "lazy star *? basic" := do
+  -- Greedy * matches as much as possible
+  let greedy ← compile! "a.*b"
+  if let some m := greedy.find "aXXbYYb" then
+    m.text ≡ "aXXbYYb"  -- Greedy: matches to the LAST 'b'
+  -- Lazy *? matches as little as possible
+  let lazy ← compile! "a.*?b"
+  if let some m := lazy.find "aXXbYYb" then
+    m.text ≡ "aXXb"  -- Lazy: matches to the FIRST 'b'
+
+test "lazy plus +? basic" := do
+  -- Greedy + matches as much as possible
+  let greedy ← compile! "a.+b"
+  if let some m := greedy.find "aXXbYYb" then
+    m.text ≡ "aXXbYYb"  -- Greedy: matches to the LAST 'b'
+  -- Lazy +? matches as little as possible
+  let lazy ← compile! "a.+?b"
+  if let some m := lazy.find "aXXbYYb" then
+    m.text ≡ "aXXb"  -- Lazy: matches to the FIRST 'b'
+
+test "lazy question ?? basic" := do
+  -- Greedy ? prefers to match
+  let greedy ← compile! "ab?"
+  if let some m := greedy.find "ab" then
+    m.text ≡ "ab"  -- Greedy: matches 'ab'
+  if let some m := greedy.find "a" then
+    m.text ≡ "a"   -- Falls back to 'a' if no 'b'
+  -- Lazy ?? prefers NOT to match
+  let lazy ← compile! "ab??"
+  if let some m := lazy.find "ab" then
+    m.text ≡ "a"  -- Lazy: matches just 'a', skips optional 'b'
+
+test "lazy star *? HTML tags" := do
+  -- Classic use case: matching HTML tags
+  let greedy ← compile! "<.*>"
+  if let some m := greedy.find "<b>bold</b>" then
+    m.text ≡ "<b>bold</b>"  -- Greedy: matches entire string
+  let lazy ← compile! "<.*?>"
+  if let some m := lazy.find "<b>bold</b>" then
+    m.text ≡ "<b>"  -- Lazy: matches just first tag
+
+test "lazy star *? findAll" := do
+  -- Find all HTML tags with lazy quantifier
+  let re ← compile! "<.*?>"
+  let results := re.findAll "<a><b></b></a>"
+  results.length ≡ 4
+  (results[0]?.map (·.text)) ≡ some "<a>"
+  (results[1]?.map (·.text)) ≡ some "<b>"
+  (results[2]?.map (·.text)) ≡ some "</b>"
+  (results[3]?.map (·.text)) ≡ some "</a>"
+
+test "lazy plus +? minimum one" := do
+  -- +? still requires at least one character
+  let re ← compile! "a.+?b"
+  shouldSatisfy (re.test "aXb") "should match 'aXb' (one char between)"
+  shouldSatisfy (!re.test "ab") "should not match 'ab' (no char between)"
+  if let some m := re.find "aXYZb" then
+    m.text ≡ "aXYZb"  -- All chars needed to reach 'b'
+
+test "lazy star *? empty match" := do
+  -- *? can match zero characters
+  let re ← compile! "a.*?b"
+  if let some m := re.find "ab" then
+    m.text ≡ "ab"  -- Zero chars between
+
+test "lazy quantifier with captures" := do
+  -- Capture groups with lazy quantifiers
+  let re ← compile! "<(.*?)>"
+  if let some m := re.find "<hello>world</hello>" then
+    m.text ≡ "<hello>"
+    m.group 1 ≡ "hello"
+
+test "lazy bounded {n,m}?" := do
+  -- Lazy bounded quantifier
+  let greedy ← compile! "a{2,4}"
+  if let some m := greedy.find "aaaaa" then
+    m.text ≡ "aaaa"  -- Greedy: matches 4
+  let lazy ← compile! "a{2,4}?"
+  if let some m := lazy.find "aaaaa" then
+    m.text ≡ "aa"  -- Lazy: matches 2 (minimum)
+
+test "lazy bounded {n,}?" := do
+  -- Lazy unbounded minimum
+  let greedy ← compile! "a{2,}"
+  if let some m := greedy.find "aaaaa" then
+    m.text ≡ "aaaaa"  -- Greedy: matches all 5
+  let lazy ← compile! "a{2,}?"
+  if let some m := lazy.find "aaaaa" then
+    m.text ≡ "aa"  -- Lazy: matches just 2
+
+test "lazy bounded {0,n}?" := do
+  -- Lazy optional repetition
+  let lazy ← compile! "a{0,3}?b"
+  -- Note: lazy prefers fewer 'a's, but must find 'b' starting from position 0
+  -- In "aaab", there's no 'b' until after the 'a's, so we match all of them
+  if let some m := lazy.find "aaab" then
+    m.text ≡ "aaab"
+  -- When 'b' is available immediately, lazy matches zero 'a's
+  if let some m := lazy.find "b" then
+    m.text ≡ "b"
+  -- When 'b' comes after just one 'a', lazy matches one
+  if let some m := lazy.find "ab" then
+    m.text ≡ "ab"
+
+test "lazy vs greedy comparison star" := do
+  let greedy ← compile! "\".*\""
+  let lazy ← compile! "\".*?\""
+  let input := "\"first\" and \"second\""
+  if let some m := greedy.find input then
+    m.text ≡ "\"first\" and \"second\""  -- Greedy: entire quoted section
+  if let some m := lazy.find input then
+    m.text ≡ "\"first\""  -- Lazy: just first quoted string
+
+test "lazy vs greedy comparison plus" := do
+  let greedy ← compile! "\\d+"
+  let lazy ← compile! "\\d+?"
+  if let some m := greedy.find "12345" then
+    m.text ≡ "12345"  -- Greedy: all digits
+  if let some m := lazy.find "12345" then
+    m.text ≡ "1"  -- Lazy: just one digit
+
+test "lazy quantifier with word boundary" := do
+  -- \b\w+?\b requires word boundaries on BOTH sides
+  -- "h" alone has no trailing word boundary (h|ello is word-to-word)
+  -- So the minimum complete word match is "hello"
+  let re ← compile! "\\b\\w+?\\b"
+  if let some m := re.find "hello world" then
+    m.text ≡ "hello"  -- Smallest complete word
+  -- Both greedy and lazy match complete words with \b on both sides
+  let greedy ← compile! "\\b\\w+\\b"
+  if let some m := greedy.find "hello world" then
+    m.text ≡ "hello"
+
+test "lazy quantifier with anchors" := do
+  let re ← compile! "^.*?x"
+  if let some m := re.find "abcxdefx" then
+    m.text ≡ "abcx"  -- Finds first 'x' from start
+  -- x.*?$ matches from the FIRST 'x' found, then lazily to end
+  -- In "axbxc", first 'x' is at position 1, lazy .*? matches minimum to reach $
+  let re2 ← compile! "x.*?$"
+  if let some m := re2.find "axbxc" then
+    m.text ≡ "xbxc"  -- First 'x' to end (find returns first match position)
+
+test "nested lazy quantifiers" := do
+  let re ← compile! "\\(.*?\\(.*?\\).*?\\)"
+  if let some m := re.find "(a(b)c)(d(e)f)" then
+    m.text ≡ "(a(b)c)"  -- Matches first complete nested pair
+
+test "lazy quantifier findAll multiple" := do
+  let re ← compile! "\\d+?"
+  let results := re.findAll "a1b23c456d"
+  -- Lazy +? matches one digit at a time
+  results.length ≡ 6
+  (results[0]?.map (·.text)) ≡ some "1"
+  (results[1]?.map (·.text)) ≡ some "2"
+  (results[2]?.map (·.text)) ≡ some "3"
+  (results[3]?.map (·.text)) ≡ some "4"
+  (results[4]?.map (·.text)) ≡ some "5"
+  (results[5]?.map (·.text)) ≡ some "6"
+
+test "lazy star at end of pattern" := do
+  -- When lazy * is at end, it matches zero
+  let re ← compile! "abc.*?"
+  if let some m := re.find "abcdef" then
+    m.text ≡ "abc"  -- Lazy: matches zero chars after 'abc'
+
+test "lazy question ?? vs greedy ?" := do
+  -- Greedy ? matches if possible
+  let greedy ← compile! "colou?r"
+  shouldSatisfy (greedy.test "color") "greedy matches 'color'"
+  shouldSatisfy (greedy.test "colour") "greedy matches 'colour'"
+  -- Lazy ?? prefers not to match, but will if needed
+  let lazy ← compile! "colou??r"
+  shouldSatisfy (lazy.test "color") "lazy matches 'color'"
+  shouldSatisfy (lazy.test "colour") "lazy matches 'colour'"
+  -- The difference shows in what gets captured
+  if let some m := lazy.find "colour" then
+    m.text ≡ "colour"  -- Has to match 'u' to reach 'r'
+
+test "lazy with character class" := do
+  let re ← compile! "\\[.*?\\]"
+  if let some m := re.find "[a][b][c]" then
+    m.text ≡ "[a]"  -- First bracketed section
+  let results := re.findAll "[a][b][c]"
+  results.length ≡ 3
+
+test "lazy quantifier preserves captures" := do
+  -- ([a-z]+?) needs to be followed by space, so must match until space
+  -- The first group matches "hello" (minimum to reach space)
+  -- The second group matches "w" (minimum, no constraint after)
+  let re ← compile! "([a-z]+?) ([a-z]+?)"
+  if let some m := re.find "hello world" then
+    m.text ≡ "hello w"
+    m.group 1 ≡ "hello"  -- Must reach space
+    m.group 2 ≡ "w"      -- Truly lazy, nothing required after
+  -- Compare with greedy
+  let greedy ← compile! "([a-z]+) ([a-z]+)"
+  if let some m := greedy.find "hello world" then
+    m.text ≡ "hello world"
+    m.group 1 ≡ "hello"
+    m.group 2 ≡ "world"
+
+test "lazy alternation interaction" := do
+  -- Lazy quantifier in alternation - still needs 'c' to follow
+  -- In "aaac", a+? tries 'a' then looks for 'c' - fails, extends to 'aa', fails, etc.
+  let re ← compile! "(a+?|b+?)c"
+  if let some m := re.find "aaac" then
+    m.text ≡ "aaac"  -- Minimum a's needed to reach 'c'
+    m.group 1 ≡ "aaa"
+  -- When 'c' comes right after first 'a', truly lazy
+  if let some m := re.find "ac" then
+    m.text ≡ "ac"
+    m.group 1 ≡ "a"
+
+test "lazy quantifier edge case empty input" := do
+  let re ← compile! "a*?"
+  if let some m := re.find "" then
+    m.text ≡ ""  -- Matches empty string
+
+test "lazy quantifier complex pattern" := do
+  -- Parse key=value pairs lazily
+  -- ([^=]+?) needs '=' after it, so matches until first '='
+  -- ([^;]+?) has nothing after it, so matches just one char
+  let re ← compile! "([^=]+?)=([^;]+?)"
+  if let some m := re.find "name=John;age=30" then
+    m.text ≡ "name=J"
+    m.group 1 ≡ "name"  -- Must reach '='
+    m.group 2 ≡ "J"     -- Truly lazy, nothing required after
+  -- With anchor requiring ';' at end, both groups lazy but constrained
+  let re2 ← compile! "^([^=]+?)=(.+?);"
+  if let some m := re2.find "name=John;age=30" then
+    m.text ≡ "name=John;"
+    m.group 1 ≡ "name"
+    m.group 2 ≡ "John"
+
 #generate_tests
 
 end RuneTests.MatchTests

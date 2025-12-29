@@ -251,14 +251,22 @@ def parseBoundedQuantifier : Parser Quantifier := do
     expect '}'
     return Quantifier.exactly n
 
-/-- Parse a quantifier *, +, ?, or {n,m} -/
+/-- Parse a quantifier *, +, ?, or {n,m}, with optional ? suffix for lazy matching -/
 def parseQuantifier? : Parser (Option Quantifier) := do
-  match ← peek? with
-  | some '*' => discard next; return some Quantifier.zeroOrMore
-  | some '+' => discard next; return some Quantifier.oneOrMore
-  | some '?' => discard next; return some Quantifier.zeroOrOne
-  | some '{' => return some (← parseBoundedQuantifier)
-  | _ => return none
+  let base? ← match ← peek? with
+  | some '*' => discard next; pure (some Quantifier.zeroOrMore)
+  | some '+' => discard next; pure (some Quantifier.oneOrMore)
+  | some '?' => discard next; pure (some Quantifier.zeroOrOne)
+  | some '{' => pure (some (← parseBoundedQuantifier))
+  | _ => pure none
+  -- Check for lazy modifier (trailing ?)
+  match base? with
+  | some q =>
+    if ← tryChar '?' then
+      return some q.lazy
+    else
+      return some q
+  | none => return none
 
 end Parser
 

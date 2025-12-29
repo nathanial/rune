@@ -95,6 +95,7 @@ structure NFA where
   accept : StateId                 -- Single accept state (Thompson property)
   captureCount : Nat
   namedGroups : List (String × Nat)
+  prefersShortestMatch : Bool := false  -- True if pattern has lazy quantifiers
   deriving Repr
 
 namespace NFA

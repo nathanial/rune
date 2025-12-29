@@ -65,21 +65,28 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 ---
 
-### [Priority: Medium] Lazy (Non-Greedy) Quantifiers
+### [COMPLETED] Lazy (Non-Greedy) Quantifiers
 
-**Description:** Add support for lazy quantifiers `*?`, `+?`, `??`, `{n,m}?` that match as few characters as possible.
+**Status:** Implemented and tested (2024-12-28)
 
-**Rationale:** Greedy-only quantifiers limit the library's usefulness. For example, matching the first HTML tag in `<b>bold</b>` with `<.*>` captures the entire string greedily; users need `<.*?>` to capture just `<b>`.
+**Description:** Added support for lazy quantifiers `*?`, `+?`, `??`, `{n,m}?` that match as few characters as possible.
 
-**Affected Files:**
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/AST/Types.lean` - add `greedy : Bool` field to Quantifier
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/Parser/Parser.lean` - parse `?` suffix after quantifiers
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/NFA/Compiler.lean` - adjust epsilon ordering for lazy mode
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/Match/Simulation.lean` - respect quantifier greediness
+**Changes Made:**
+- Added `greedy : Bool := true` field to `Quantifier` in `AST/Types.lean`
+- Added lazy quantifier constructors: `Quantifier.lazy`, `zeroOrMoreLazy`, `oneOrMoreLazy`, `zeroOrOneLazy`
+- Updated parser to recognize `?` suffix after quantifiers for lazy matching
+- Updated NFA compiler to adjust epsilon transition ordering for lazy mode (skip before take)
+- Added `hasLazyQuantifier` tracking in compiler state
+- Added `prefersShortestMatch` flag to NFA structure
+- Updated simulation to return first match for lazy patterns instead of longest match
 
-**Estimated Effort:** Medium
-
-**Dependencies:** None
+**Test Coverage:** 24 new tests in `MatchTests.lean`:
+- Basic lazy quantifiers: `*?`, `+?`, `??`
+- HTML tag matching example
+- Lazy with captures, anchors, word boundaries
+- Bounded lazy quantifiers: `{n,m}?`, `{n,}?`, `{0,n}?`
+- Greedy vs lazy comparisons
+- Edge cases: empty input, nested patterns, alternation
 
 ---
 
@@ -529,13 +536,13 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 | Category | High | Medium | Low | Completed | Total |
 |----------|------|--------|-----|-----------|-------|
-| Features | 0 | 5 | 2 | 3 | 10 |
+| Features | 0 | 4 | 2 | 4 | 10 |
 | Improvements | 0 | 2 | 2 | 3 | 7 |
 | Cleanup | 1 | 2 | 2 | 1 | 6 |
 | Tests | 0 | 2 | 0 | 2 | 4 |
 | API | 0 | 2 | 2 | 0 | 4 |
 | Documentation | 0 | 1 | 1 | 0 | 2 |
-| **Total** | **1** | **14** | **9** | **8** | **33** |
+| **Total** | **1** | **13** | **9** | **9** | **33** |
 
 ### Completed Items
 
@@ -547,12 +554,13 @@ This document tracks potential improvements, new features, and code cleanup oppo
 6. **POSIX class tests** (2024-12-28) - 16 comprehensive tests for all 12 POSIX classes
 7. **Array thread management** (2024-12-28) - Converted from List to Array for O(1) push and better cache locality
 8. **Pre-compiled character classes** (2024-12-28) - 128-bit ASCII bitmap for O(1) lookup, 23 new edge case tests
+9. **Lazy quantifiers** (2024-12-28) - `*?`, `+?`, `??`, `{n,m}?` for non-greedy matching, 24 new tests
 
-**Test count: 113 tests**
+**Test count: 137 tests**
 
 ### Recommended Next Steps
 
-1. **Lazy quantifiers** (`*?`, `+?`) - Commonly needed feature
-2. **Regex flags** (`(?i)`, `(?m)`) - Case-insensitive and multiline modes
-3. **Edge case tests** - Empty groups, nested groups, quantified groups
-4. **Lookahead assertions** (`(?=...)`, `(?!...)`) - Password validation, advanced patterns
+1. **Regex flags** (`(?i)`, `(?m)`) - Case-insensitive and multiline modes
+2. **Edge case tests** - Empty groups, nested groups, quantified groups
+3. **Lookahead assertions** (`(?=...)`, `(?!...)`) - Password validation, advanced patterns
+4. **Remove emptyPattern error** - Unused error variant cleanup

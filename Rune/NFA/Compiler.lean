@@ -11,6 +11,7 @@ namespace Rune.NFA
 structure CompilerState where
   nextStateId : StateId := 0
   states : Array State := #[]
+  hasLazyQuantifier : Bool := false
   deriving Repr
 
 /-- Compiler monad -/
@@ -37,6 +38,10 @@ def addTransition (from_ : StateId) (t : Transition) : Compiler Unit := do
 /-- Add an epsilon transition -/
 def addEpsilon (from_ to : StateId) (captures : List CaptureOp := []) : Compiler Unit :=
   addTransition from_ { label := .epsilon, target := to, captures }
+
+/-- Mark that we've used a lazy quantifier -/
+def markLazyQuantifier : Compiler Unit :=
+  modify fun s => { s with hasLazyQuantifier := true }
 
 end Compiler
 
@@ -136,34 +141,57 @@ mutual
       compileExpr .empty
 
     | 0, some 1 =>
-      -- ? (zero or one)
+      -- ? or ?? (zero or one)
       let frag ← compileExpr expr
       let start ← Compiler.newState
       let accept ← Compiler.newState
-      Compiler.addEpsilon start frag.start
-      Compiler.addEpsilon start accept
+      -- For greedy: try to match first, then skip
+      -- For lazy: try to skip first, then match
+      if q.greedy then
+        Compiler.addEpsilon start frag.start
+        Compiler.addEpsilon start accept
+      else
+        Compiler.markLazyQuantifier
+        Compiler.addEpsilon start accept
+        Compiler.addEpsilon start frag.start
       Compiler.addEpsilon frag.accept accept
       return { start, accept }
 
     | 0, none =>
-      -- * (zero or more)
+      -- * or *? (zero or more)
       let frag ← compileExpr expr
       let start ← Compiler.newState
       let accept ← Compiler.newState
-      Compiler.addEpsilon start frag.start
-      Compiler.addEpsilon start accept
-      Compiler.addEpsilon frag.accept frag.start
-      Compiler.addEpsilon frag.accept accept
+      -- For greedy: try to match first, then skip
+      -- For lazy: try to skip first, then match
+      if q.greedy then
+        Compiler.addEpsilon start frag.start
+        Compiler.addEpsilon start accept
+        Compiler.addEpsilon frag.accept frag.start
+        Compiler.addEpsilon frag.accept accept
+      else
+        Compiler.markLazyQuantifier
+        Compiler.addEpsilon start accept
+        Compiler.addEpsilon start frag.start
+        Compiler.addEpsilon frag.accept accept
+        Compiler.addEpsilon frag.accept frag.start
       return { start, accept }
 
     | 1, none =>
-      -- + (one or more)
+      -- + or +? (one or more)
       let frag ← compileExpr expr
       let start ← Compiler.newState
       let accept ← Compiler.newState
       Compiler.addEpsilon start frag.start
-      Compiler.addEpsilon frag.accept frag.start
-      Compiler.addEpsilon frag.accept accept
+      -- For greedy: try to repeat first, then accept
+      -- For lazy: try to accept first, then repeat
+      if q.greedy then
+        Compiler.addEpsilon frag.accept frag.start
+        Compiler.addEpsilon frag.accept accept
+      else
+        Compiler.markLazyQuantifier
+        Compiler.addEpsilon frag.accept accept
+        Compiler.addEpsilon frag.accept frag.start
       return { start, accept }
 
     | m, some n =>
@@ -171,13 +199,15 @@ mutual
         compileExactly expr m
       else
         let required ← compileExactly expr m
-        let optional ← compileOptionalUpTo expr (n - m)
+        let optional ← compileOptionalUpTo expr (n - m) q.greedy
         Compiler.addEpsilon required.accept optional.start
         return { start := required.start, accept := optional.accept }
 
     | m, none =>
       let required ← compileExactly expr m
-      let star ← compileQuantified expr Quantifier.zeroOrMore
+      -- Pass greediness to the unbounded part
+      let starQ := if q.greedy then Quantifier.zeroOrMore else Quantifier.zeroOrMoreLazy
+      let star ← compileQuantified expr starQ
       Compiler.addEpsilon required.accept star.start
       return { start := required.start, accept := star.accept }
 
@@ -194,17 +224,25 @@ mutual
       return { start := first.start, accept := rest.accept }
 
   /-- Compile 0 to n optional copies of an expression -/
-  partial def compileOptionalUpTo (expr : Expr) (n : Nat) : Compiler Fragment := do
+  partial def compileOptionalUpTo (expr : Expr) (n : Nat) (greedy : Bool := true) : Compiler Fragment := do
     if n == 0 then
       compileExpr .empty
     else
+      if !greedy then
+        Compiler.markLazyQuantifier
       let start ← Compiler.newState
       let accept ← Compiler.newState
       let mut current := start
       for _ in [:n] do
         let frag ← compileExpr expr
-        Compiler.addEpsilon current frag.start
-        Compiler.addEpsilon current accept
+        -- For greedy: try to match first, then skip
+        -- For lazy: try to skip first, then match
+        if greedy then
+          Compiler.addEpsilon current frag.start
+          Compiler.addEpsilon current accept
+        else
+          Compiler.addEpsilon current accept
+          Compiler.addEpsilon current frag.start
         Compiler.addEpsilon frag.accept accept
         current := frag.accept
       return { start, accept }
@@ -220,7 +258,8 @@ def compile (ast : RegexAST) : NFA :=
     start := frag.start,
     accept := frag.accept,
     captureCount := ast.captureCount,
-    namedGroups := ast.namedGroups
+    namedGroups := ast.namedGroups,
+    prefersShortestMatch := finalState.hasLazyQuantifier
   }
 
 end Rune.NFA

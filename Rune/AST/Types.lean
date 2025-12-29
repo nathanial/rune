@@ -8,8 +8,9 @@ namespace Rune
 
 /-- Quantifier bounds for repetition operators -/
 structure Quantifier where
-  min : Nat           -- Minimum number of repetitions
-  max : Option Nat    -- Maximum (None = unbounded)
+  min : Nat              -- Minimum number of repetitions
+  max : Option Nat       -- Maximum (None = unbounded)
+  greedy : Bool := true  -- Greedy (default) or lazy matching
   deriving Repr, BEq, Inhabited
 
 namespace Quantifier
@@ -35,6 +36,19 @@ def between (m n : Nat) : Quantifier := { min := m, max := some n }
 /-- Check if this quantifier matches exactly one occurrence -/
 def isExactlyOne (q : Quantifier) : Bool :=
   q.min == 1 && q.max == some 1
+
+/-- Make a quantifier lazy (non-greedy) -/
+def lazy (q : Quantifier) : Quantifier :=
+  { q with greedy := false }
+
+/-- Zero or more lazy: *? -/
+def zeroOrMoreLazy : Quantifier := { min := 0, max := none, greedy := false }
+
+/-- One or more lazy: +? -/
+def oneOrMoreLazy : Quantifier := { min := 1, max := none, greedy := false }
+
+/-- Zero or one lazy: ?? -/
+def zeroOrOneLazy : Quantifier := { min := 0, max := some 1, greedy := false }
 
 end Quantifier
 

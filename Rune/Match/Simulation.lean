@@ -115,6 +115,9 @@ def findMatchAt (nfa : NFA) (input : String) (startPos : Nat) : Option Match := 
 
   -- Check for immediate match (empty pattern at start)
   if let some thread := findAcceptingThread nfa threads then
+    -- For lazy patterns, return the first match immediately
+    if nfa.prefersShortestMatch then
+      return some (buildMatch input startPos pos thread nfa.namedGroups)
     lastMatch := some (thread, pos)
 
   -- Process each character using array indexing (toList.toArray computed once)
@@ -126,8 +129,12 @@ def findMatchAt (nfa : NFA) (input : String) (startPos : Nat) : Option Match := 
     threads := step nfa threads c input pos
     pos := pos + 1
 
-    -- Check for match (keep the longest)
+    -- Check for match
     if let some thread := findAcceptingThread nfa threads then
+      -- For lazy patterns, return the first match immediately
+      if nfa.prefersShortestMatch then
+        return some (buildMatch input startPos pos thread nfa.namedGroups)
+      -- For greedy patterns, keep the longest match
       lastMatch := some (thread, pos)
 
     if threads.size == 0 then
