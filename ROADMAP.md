@@ -188,18 +188,18 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 ## Code Improvements
 
-### [Priority: High] Optimize String Iteration in Simulation
+### [COMPLETED] Optimize String Iteration in Simulation
 
-**Current State:** `Match/Simulation.lean` line 93 uses `input.toList.drop startPos` which allocates a new list for each starting position during the find loop.
+**Status:** Implemented and tested (2024-12-28)
 
-**Proposed Change:** Use `String.Pos` and `String.Iterator` for zero-allocation character iteration, or pre-compute the character array once.
+**Description:** Optimized string iteration to avoid repeated allocations.
 
-**Benefits:** Significant performance improvement for long strings with no matches or late matches.
+**Changes Made:**
+- `findMatchAt`: Convert string to char array once (`input.toList.toArray`) instead of using `toList.drop` for each starting position
+- `findAll`: Build result list in reverse with O(1) prepend, then reverse once at end (O(n) total instead of O(n²))
+- Added `isWordCharAtArray` helper for efficient array-based word boundary checking
 
-**Affected Files:**
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/Match/Simulation.lean`
-
-**Estimated Effort:** Small
+**Benefits:** Significant performance improvement for long strings, especially with many match attempts.
 
 ---
 
@@ -516,12 +516,12 @@ This document tracks potential improvements, new features, and code cleanup oppo
 | Category | High | Medium | Low | Completed | Total |
 |----------|------|--------|-----|-----------|-------|
 | Features | 0 | 5 | 2 | 3 | 10 |
-| Improvements | 2 | 3 | 2 | 0 | 7 |
+| Improvements | 1 | 3 | 2 | 1 | 7 |
 | Cleanup | 1 | 2 | 3 | 0 | 6 |
 | Tests | 0 | 2 | 1 | 1 | 4 |
 | API | 0 | 2 | 2 | 0 | 4 |
 | Documentation | 0 | 1 | 1 | 0 | 2 |
-| **Total** | **3** | **15** | **11** | **4** | **33** |
+| **Total** | **2** | **15** | **11** | **5** | **33** |
 
 ### Completed Items
 
@@ -529,12 +529,13 @@ This document tracks potential improvements, new features, and code cleanup oppo
 2. **Anchor behavior tests** (2024-12-28) - 9 comprehensive tests added
 3. **Shorthand character classes** (2024-12-28) - `\d`, `\w`, `\s` and negations implemented with 7 tests
 4. **Word boundary anchors** (2024-12-28) - `\b` and `\B` implemented with 6 tests
+5. **String iteration optimization** (2024-12-28) - Char array computed once, O(n) findAll
 
 **Test count: 74 tests (was 52)**
 
 ### Recommended Next Steps
 
-1. **Optimize string iteration** - Quick performance win (`input.toList.drop` allocates per position)
+1. **Use Array for thread management** - Further performance improvement
 2. **Add POSIX class tests** - Validate existing but untested functionality
 3. **Lazy quantifiers** (`*?`, `+?`) - Commonly needed feature
 4. **Regex flags** (`(?i)`, `(?m)`) - Case-insensitive and multiline modes
