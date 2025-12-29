@@ -234,19 +234,27 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 ---
 
-### [Priority: Medium] Pre-compiled Character Class Predicates
+### [COMPLETED] Pre-compiled Character Class Predicates
 
-**Current State:** Character class matching iterates through all elements for each character test (`BracketExpr.test` calls `List.any`).
+**Status:** Implemented (2024-12-28)
 
-**Proposed Change:** For character ranges, precompute a bitmap or sorted interval list for O(log n) or O(1) lookup.
+**Description:** Character classes now use a 128-bit ASCII bitmap for O(1) lookup instead of iterating through elements.
 
-**Benefits:** Faster matching for complex character classes like `[a-zA-Z0-9_]`.
+**Changes Made:**
+- Added `CompiledCharClass` structure with two `UInt64` bitmaps covering ASCII 0-127
+- `compile` function builds bitmap at NFA construction time, pre-computing all character matches
+- For POSIX classes, all 128 ASCII characters are tested and bits set accordingly
+- Non-ASCII characters fall back to original `BracketExpr.test` implementation
+- `TransLabel.charClass` now stores `CompiledCharClass` instead of `BracketExpr`
+- NFA compiler calls `CompiledCharClass.compile` when creating character class transitions
 
-**Affected Files:**
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/Core/CharClass.lean`
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/NFA/Types.lean`
+**Performance:** O(1) bit test for ASCII characters (was O(n) list iteration)
 
-**Estimated Effort:** Medium
+**Test Coverage:** Added 23 new character class edge case tests validating:
+- Range boundaries, overlapping ranges, single-char ranges
+- Literal hyphens and brackets, caret as literal
+- Negated classes, mixed elements
+- All ASCII chars against `\w` and `\s`
 
 ---
 
@@ -522,12 +530,12 @@ This document tracks potential improvements, new features, and code cleanup oppo
 | Category | High | Medium | Low | Completed | Total |
 |----------|------|--------|-----|-----------|-------|
 | Features | 0 | 5 | 2 | 3 | 10 |
-| Improvements | 0 | 3 | 2 | 2 | 7 |
+| Improvements | 0 | 2 | 2 | 3 | 7 |
 | Cleanup | 1 | 2 | 2 | 1 | 6 |
 | Tests | 0 | 2 | 0 | 2 | 4 |
 | API | 0 | 2 | 2 | 0 | 4 |
 | Documentation | 0 | 1 | 1 | 0 | 2 |
-| **Total** | **1** | **15** | **9** | **7** | **33** |
+| **Total** | **1** | **14** | **9** | **8** | **33** |
 
 ### Completed Items
 
@@ -538,12 +546,13 @@ This document tracks potential improvements, new features, and code cleanup oppo
 5. **String iteration optimization** (2024-12-28) - Char array computed once, O(n) findAll
 6. **POSIX class tests** (2024-12-28) - 16 comprehensive tests for all 12 POSIX classes
 7. **Array thread management** (2024-12-28) - Converted from List to Array for O(1) push and better cache locality
+8. **Pre-compiled character classes** (2024-12-28) - 128-bit ASCII bitmap for O(1) lookup, 23 new edge case tests
 
-**Test count: 90 tests**
+**Test count: 113 tests**
 
 ### Recommended Next Steps
 
 1. **Lazy quantifiers** (`*?`, `+?`) - Commonly needed feature
 2. **Regex flags** (`(?i)`, `(?m)`) - Case-insensitive and multiline modes
 3. **Edge case tests** - Empty groups, nested groups, quantified groups
-4. **Pre-compiled character class predicates** - Bitmap/interval lookup for faster matching
+4. **Lookahead assertions** (`(?=...)`, `(?!...)`) - Password validation, advanced patterns

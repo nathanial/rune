@@ -13,7 +13,7 @@ abbrev StateId := Nat
 inductive TransLabel where
   | epsilon                        -- Epsilon transition (no input consumed)
   | char (c : Char)                -- Single character
-  | charClass (bracket : BracketExpr) -- Character class from bracket expression
+  | charClass (compiled : CompiledCharClass) -- Compiled character class with O(1) ASCII lookup
   | dot                            -- Any character (except newline)
   | anchorStart                    -- ^ anchor (must be at start of input)
   | anchorEnd                      -- $ anchor (must be at end of input)
@@ -24,11 +24,12 @@ inductive TransLabel where
 namespace TransLabel
 
 /-- Check if a character matches this transition label -/
+@[inline]
 def test (label : TransLabel) (c : Char) : Bool :=
   match label with
   | .epsilon => false  -- Epsilon never matches a character
   | .char x => c == x
-  | .charClass br => br.test c
+  | .charClass cc => cc.test c
   | .dot => c != '\n'
   | .anchorStart => false  -- Anchors never match characters
   | .anchorEnd => false

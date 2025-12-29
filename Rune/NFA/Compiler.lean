@@ -64,7 +64,9 @@ mutual
     | .bracket br =>
       let start ← Compiler.newState
       let accept ← Compiler.newState
-      Compiler.addTransition start { label := .charClass br, target := accept }
+      -- Compile the bracket expression to a bitmap for O(1) ASCII lookup
+      let compiled := CompiledCharClass.compile br
+      Compiler.addTransition start { label := .charClass compiled, target := accept }
       return { start, accept }
 
     | .concat exprs =>

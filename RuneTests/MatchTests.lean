@@ -445,6 +445,219 @@ test "POSIX in complex pattern" := do
   if let some m := re.find "  hello123  " then
     m.text ≡ "hello123"
 
+-- Character class edge case tests (for optimization validation)
+
+test "bracket single char" := do
+  let re ← compile! "[x]"
+  shouldSatisfy (re.test "x") "should match 'x'"
+  shouldSatisfy (!re.test "y") "should not match 'y'"
+  shouldSatisfy (!re.test "X") "should not match 'X' (case sensitive)"
+
+test "bracket multiple singles" := do
+  let re ← compile! "[aeiou]"
+  shouldSatisfy (re.test "a") "should match 'a'"
+  shouldSatisfy (re.test "e") "should match 'e'"
+  shouldSatisfy (re.test "i") "should match 'i'"
+  shouldSatisfy (re.test "o") "should match 'o'"
+  shouldSatisfy (re.test "u") "should match 'u'"
+  shouldSatisfy (!re.test "b") "should not match 'b'"
+  shouldSatisfy (!re.test "z") "should not match 'z'"
+
+test "range exact boundaries" := do
+  let re ← compile! "[a-f]"
+  shouldSatisfy (re.test "a") "should match 'a' (lower bound)"
+  shouldSatisfy (re.test "f") "should match 'f' (upper bound)"
+  shouldSatisfy (re.test "c") "should match 'c' (middle)"
+  shouldSatisfy (!re.test "`") "should not match '`' (char before 'a')"
+  shouldSatisfy (!re.test "g") "should not match 'g' (char after 'f')"
+
+test "numeric range boundaries" := do
+  let re ← compile! "[3-7]"
+  shouldSatisfy (re.test "3") "should match '3' (lower bound)"
+  shouldSatisfy (re.test "7") "should match '7' (upper bound)"
+  shouldSatisfy (re.test "5") "should match '5' (middle)"
+  shouldSatisfy (!re.test "2") "should not match '2' (before range)"
+  shouldSatisfy (!re.test "8") "should not match '8' (after range)"
+
+test "single char range" := do
+  -- [a-a] should match only 'a'
+  let re ← compile! "[a-a]"
+  shouldSatisfy (re.test "a") "should match 'a'"
+  shouldSatisfy (!re.test "b") "should not match 'b'"
+
+test "multiple ranges" := do
+  let re ← compile! "[a-cA-C0-2]"
+  -- lowercase a-c
+  shouldSatisfy (re.test "a") "should match 'a'"
+  shouldSatisfy (re.test "b") "should match 'b'"
+  shouldSatisfy (re.test "c") "should match 'c'"
+  shouldSatisfy (!re.test "d") "should not match 'd'"
+  -- uppercase A-C
+  shouldSatisfy (re.test "A") "should match 'A'"
+  shouldSatisfy (re.test "B") "should match 'B'"
+  shouldSatisfy (re.test "C") "should match 'C'"
+  shouldSatisfy (!re.test "D") "should not match 'D'"
+  -- digits 0-2
+  shouldSatisfy (re.test "0") "should match '0'"
+  shouldSatisfy (re.test "1") "should match '1'"
+  shouldSatisfy (re.test "2") "should match '2'"
+  shouldSatisfy (!re.test "3") "should not match '3'"
+
+test "overlapping ranges" := do
+  -- [a-za-m] has overlapping ranges, should work correctly
+  let re ← compile! "[a-za-m]"
+  shouldSatisfy (re.test "a") "should match 'a'"
+  shouldSatisfy (re.test "m") "should match 'm'"
+  shouldSatisfy (re.test "z") "should match 'z'"
+  shouldSatisfy (!re.test "A") "should not match 'A'"
+
+test "bracket literal hyphen at start" := do
+  -- [-a] means literal hyphen and 'a'
+  let re ← compile! "[-a]"
+  shouldSatisfy (re.test "-") "should match '-'"
+  shouldSatisfy (re.test "a") "should match 'a'"
+  shouldSatisfy (!re.test "b") "should not match 'b'"
+
+test "bracket literal hyphen at end" := do
+  -- [a-] means 'a' and literal hyphen
+  let re ← compile! "[a-]"
+  shouldSatisfy (re.test "a") "should match 'a'"
+  shouldSatisfy (re.test "-") "should match '-'"
+  shouldSatisfy (!re.test "b") "should not match 'b'"
+
+test "bracket literal right bracket at start" := do
+  -- []a] means literal ']' and 'a'
+  let re ← compile! "[]a]"
+  shouldSatisfy (re.test "]") "should match ']'"
+  shouldSatisfy (re.test "a") "should match 'a'"
+  shouldSatisfy (!re.test "[") "should not match '['"
+
+test "negated bracket basics" := do
+  let re ← compile! "[^abc]"
+  shouldSatisfy (!re.test "a") "should not match 'a'"
+  shouldSatisfy (!re.test "b") "should not match 'b'"
+  shouldSatisfy (!re.test "c") "should not match 'c'"
+  shouldSatisfy (re.test "d") "should match 'd'"
+  shouldSatisfy (re.test "x") "should match 'x'"
+  shouldSatisfy (re.test "0") "should match '0'"
+
+test "negated bracket with range" := do
+  let re ← compile! "[^a-z]"
+  shouldSatisfy (!re.test "a") "should not match 'a'"
+  shouldSatisfy (!re.test "m") "should not match 'm'"
+  shouldSatisfy (!re.test "z") "should not match 'z'"
+  shouldSatisfy (re.test "A") "should match 'A'"
+  shouldSatisfy (re.test "0") "should match '0'"
+  shouldSatisfy (re.test "!") "should match '!'"
+
+test "caret not at start is literal" := do
+  -- [a^b] means 'a', '^', or 'b'
+  let re ← compile! "[a^b]"
+  shouldSatisfy (re.test "a") "should match 'a'"
+  shouldSatisfy (re.test "^") "should match '^'"
+  shouldSatisfy (re.test "b") "should match 'b'"
+  shouldSatisfy (!re.test "c") "should not match 'c'"
+
+test "bracket with special chars" := do
+  let re ← compile! "[.+*?]"
+  shouldSatisfy (re.test ".") "should match '.'"
+  shouldSatisfy (re.test "+") "should match '+'"
+  shouldSatisfy (re.test "*") "should match '*'"
+  shouldSatisfy (re.test "?") "should match '?'"
+  shouldSatisfy (!re.test "a") "should not match 'a'"
+
+test "bracket ASCII boundaries" := do
+  -- Test ASCII code boundaries
+  let re ← compile! "[ -~]"  -- Space (32) to tilde (126) - all printable ASCII
+  shouldSatisfy (re.test " ") "should match space (32)"
+  shouldSatisfy (re.test "~") "should match tilde (126)"
+  shouldSatisfy (re.test "A") "should match 'A'"
+  shouldSatisfy (re.test "0") "should match '0'"
+
+test "bracket mixed elements" := do
+  -- Mix of single chars, ranges, and the result of matching
+  let re ← compile! "[aeiou0-9X-Z]"
+  -- vowels
+  shouldSatisfy (re.test "a") "should match 'a'"
+  shouldSatisfy (re.test "u") "should match 'u'"
+  -- digits
+  shouldSatisfy (re.test "0") "should match '0'"
+  shouldSatisfy (re.test "9") "should match '9'"
+  -- X-Z range
+  shouldSatisfy (re.test "X") "should match 'X'"
+  shouldSatisfy (re.test "Z") "should match 'Z'"
+  -- should not match
+  shouldSatisfy (!re.test "b") "should not match 'b'"
+  shouldSatisfy (!re.test "W") "should not match 'W'"
+
+test "shorthand \\d boundary chars" := do
+  let re ← compile! "\\d"
+  shouldSatisfy (re.test "0") "should match '0'"
+  shouldSatisfy (re.test "9") "should match '9'"
+  shouldSatisfy (!re.test "/") "should not match '/' (char before '0')"
+  shouldSatisfy (!re.test ":") "should not match ':' (char after '9')"
+
+test "shorthand \\w boundary chars" := do
+  let re ← compile! "\\w"
+  -- lowercase
+  shouldSatisfy (re.test "a") "should match 'a'"
+  shouldSatisfy (re.test "z") "should match 'z'"
+  shouldSatisfy (!re.test "`") "should not match '`' (before 'a')"
+  shouldSatisfy (!re.test "{") "should not match '{' (after 'z')"
+  -- uppercase
+  shouldSatisfy (re.test "A") "should match 'A'"
+  shouldSatisfy (re.test "Z") "should match 'Z'"
+  shouldSatisfy (!re.test "@") "should not match '@' (before 'A')"
+  shouldSatisfy (!re.test "[") "should not match '[' (after 'Z')"
+  -- digits
+  shouldSatisfy (re.test "0") "should match '0'"
+  shouldSatisfy (re.test "9") "should match '9'"
+  -- underscore
+  shouldSatisfy (re.test "_") "should match '_'"
+
+test "all ASCII chars against \\w" := do
+  -- Comprehensive test: check every printable ASCII char
+  let re ← compile! "^\\w$"
+  -- These should match (word chars)
+  for c in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_".toList do
+    shouldSatisfy (re.isMatch (String.singleton c)).isSome s!"should match '{c}'"
+  -- These should not match (non-word chars)
+  for c in " !\"#$%&'()*+,-./:;<=>?@[\\]^`{|}~".toList do
+    shouldSatisfy (re.isMatch (String.singleton c)).isNone s!"should not match '{c}'"
+
+test "all ASCII chars against \\s" := do
+  let re ← compile! "^\\s$"
+  -- Whitespace chars
+  shouldSatisfy (re.isMatch " ").isSome "should match space"
+  shouldSatisfy (re.isMatch "\t").isSome "should match tab"
+  shouldSatisfy (re.isMatch "\n").isSome "should match newline"
+  shouldSatisfy (re.isMatch "\r").isSome "should match carriage return"
+  -- Non-whitespace
+  shouldSatisfy (re.isMatch "a").isNone "should not match 'a'"
+  shouldSatisfy (re.isMatch "0").isNone "should not match '0'"
+
+test "complex negated pattern" := do
+  -- Match anything that's not alphanumeric
+  let re ← compile! "[^a-zA-Z0-9]+"
+  if let some m := re.find "hello...world" then
+    m.text ≡ "..."
+  if let some m := re.find "test@example.com" then
+    m.text ≡ "@"
+
+test "bracket with escaped chars" := do
+  let re ← compile! "[\\n\\t]"
+  shouldSatisfy (re.test "\n") "should match newline"
+  shouldSatisfy (re.test "\t") "should match tab"
+  shouldSatisfy (!re.test " ") "should not match space"
+  shouldSatisfy (!re.test "n") "should not match 'n'"
+
+test "repeated bracket pattern performance" := do
+  -- This pattern would be slow without optimization
+  let re ← compile! "[a-zA-Z0-9_]+@[a-zA-Z0-9_]+\\.[a-zA-Z]+"
+  shouldSatisfy (re.test "user@example.com") "should match email"
+  shouldSatisfy (re.test "test_123@domain.org") "should match with underscore"
+  shouldSatisfy (!re.test "@invalid") "should not match invalid email"
+
 #generate_tests
 
 end RuneTests.MatchTests

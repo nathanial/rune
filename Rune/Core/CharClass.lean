@@ -146,4 +146,107 @@ def isWordChar (c : Char) : Bool :=
 
 end BracketExpr
 
+/-- A compiled character class with O(1) ASCII lookup via bitmap.
+    For ASCII characters (0-127), we use a 128-bit bitmap stored as two UInt64s.
+    For non-ASCII or when POSIX classes are involved, we fall back to the original BracketExpr. -/
+structure CompiledCharClass where
+  /-- Bitmap for ASCII chars 0-63 -/
+  bitmapLo : UInt64
+  /-- Bitmap for ASCII chars 64-127 -/
+  bitmapHi : UInt64
+  /-- Whether the class is negated -/
+  negated : Bool
+  /-- Whether this uses only ASCII (no POSIX classes that might match non-ASCII) -/
+  asciiOnly : Bool
+  /-- Original bracket expression for fallback (POSIX classes, non-ASCII) -/
+  fallback : BracketExpr
+  deriving Repr, Inhabited, BEq
+
+namespace CompiledCharClass
+
+/-- Set a bit in the bitmap for a given ASCII character -/
+private def setBit (lo hi : UInt64) (c : Nat) : UInt64 × UInt64 :=
+  if c < 64 then
+    (lo ||| (1 <<< c.toUInt64), hi)
+  else if c < 128 then
+    (lo, hi ||| (1 <<< (c - 64).toUInt64))
+  else
+    (lo, hi)
+
+/-- Set all bits in a range [lo, hi] in the bitmap -/
+private def setRange (blo bhi : UInt64) (lo hi : Nat) : UInt64 × UInt64 := Id.run do
+  let mut result := (blo, bhi)
+  for c in [lo:hi+1] do
+    if c < 128 then
+      result := setBit result.1 result.2 c
+  result
+
+/-- Check if a POSIX class can match non-ASCII characters -/
+private def posixCanMatchNonAscii (cls : POSIXClass) : Bool :=
+  -- In our implementation, all POSIX classes only match ASCII
+  -- But for safety with potential future Unicode support, mark some as potentially non-ASCII
+  match cls with
+  | .alpha | .alnum | .lower | .upper => true  -- Could match Unicode letters
+  | _ => false
+
+/-- Check if a bracket expression uses only ASCII-compatible elements -/
+private def isAsciiOnly (br : BracketExpr) : Bool :=
+  br.elements.all fun elem =>
+    match elem with
+    | .single c => c.toNat < 128
+    | .range lo hi => lo.toNat < 128 && hi.toNat < 128
+    | .posix cls => !posixCanMatchNonAscii cls
+
+/-- Compile a BracketExpr into a CompiledCharClass -/
+def compile (br : BracketExpr) : CompiledCharClass := Id.run do
+  let mut bitmapLo : UInt64 := 0
+  let mut bitmapHi : UInt64 := 0
+
+  for elem in br.elements do
+    match elem with
+    | .single c =>
+      let n := c.toNat
+      if n < 128 then
+        let (lo, hi) := setBit bitmapLo bitmapHi n
+        bitmapLo := lo
+        bitmapHi := hi
+    | .range lo hi =>
+      let loN := lo.toNat
+      let hiN := hi.toNat
+      if loN < 128 then
+        let (blo, bhi) := setRange bitmapLo bitmapHi loN (min hiN 127)
+        bitmapLo := blo
+        bitmapHi := bhi
+    | .posix cls =>
+      -- For POSIX classes, set bits for all ASCII chars that match
+      for c in [:128] do
+        if cls.test (Char.ofNat c) then
+          let (lo, hi) := setBit bitmapLo bitmapHi c
+          bitmapLo := lo
+          bitmapHi := hi
+
+  {
+    bitmapLo,
+    bitmapHi,
+    negated := br.negated,
+    asciiOnly := isAsciiOnly br,
+    fallback := br
+  }
+
+/-- Test if a character matches this compiled character class (O(1) for ASCII) -/
+@[inline]
+def test (cc : CompiledCharClass) (c : Char) : Bool :=
+  let n := c.toNat
+  let inClass :=
+    if n < 64 then
+      (cc.bitmapLo &&& (1 <<< n.toUInt64)) != 0
+    else if n < 128 then
+      (cc.bitmapHi &&& (1 <<< (n - 64).toUInt64)) != 0
+    else
+      -- Non-ASCII: fall back to original implementation
+      cc.fallback.elements.any (·.test c)
+  if cc.negated then !inClass else inClass
+
+end CompiledCharClass
+
 end Rune
