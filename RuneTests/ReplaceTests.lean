@@ -1,16 +1,12 @@
 import Rune
 import Crucible
+import RuneTests.TestUtils
 
 namespace RuneTests.ReplaceTests
 
 open Crucible
 open Rune
-
-/-- Helper to compile a regex or fail -/
-def compile! (pattern : String) : IO Regex := do
-  match Regex.compile pattern with
-  | .ok re => pure re
-  | .error e => throw (IO.userError s!"compile error: {e}")
+open RuneTests
 
 testSuite "Replace"
 

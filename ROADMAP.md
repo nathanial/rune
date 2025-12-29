@@ -283,20 +283,16 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 ---
 
-### [Priority: Medium] Deduplicate compile! Helper in Tests
+### [COMPLETED] Deduplicate compile! Helper in Tests
 
-**Current State:** `compile!` helper is defined identically in both `MatchTests.lean` and `ReplaceTests.lean`.
+**Status:** Implemented (2024-12-28)
 
-**Proposed Change:** Move to a shared test utilities module.
+**Description:** Moved shared `compile!` helper to `TestUtils.lean`.
 
-**Benefits:** DRY principle, easier maintenance.
-
-**Affected Files:**
-- `/Users/Shared/Projects/lean-workspace/rune/RuneTests/MatchTests.lean`
-- `/Users/Shared/Projects/lean-workspace/rune/RuneTests/ReplaceTests.lean`
-- Create: `/Users/Shared/Projects/lean-workspace/rune/RuneTests/TestUtils.lean`
-
-**Estimated Effort:** Small
+**Changes Made:**
+- Created `RuneTests/TestUtils.lean` with shared `compile!` function
+- Updated `MatchTests.lean` and `ReplaceTests.lean` to import `TestUtils`
+- Removed duplicate `compile!` definitions from both test files
 
 ---
 
@@ -332,15 +328,18 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 ## Code Cleanup
 
-### [Priority: High] Remove or Implement emptyPattern Error Case
+### [COMPLETED] Remove Unused emptyPattern Error Case
 
-**Issue:** `ParseError.emptyPattern` exists in Error.lean but is never thrown by the parser. Empty patterns parse successfully as `Expr.empty`.
+**Status:** Implemented (2024-12-28)
 
-**Location:** `/Users/Shared/Projects/lean-workspace/rune/Rune/Core/Error.lean` line 18
+**Description:** Removed unused `ParseError.emptyPattern` error variant.
 
-**Action Required:** Either remove this unused error variant or implement validation that throws it.
+**Changes Made:**
+- Removed `emptyPattern` from `ParseError` inductive type
+- Removed corresponding case from `position` function
+- Removed corresponding case from `ToString` instance
 
-**Estimated Effort:** Small
+Empty patterns are valid and parse as `Expr.empty`, so this error was never thrown.
 
 ---
 
@@ -438,19 +437,17 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 ---
 
-### [Priority: Medium] Add Negative Tests for Invalid Patterns
+### [COMPLETED] Add Negative Tests for Invalid Patterns
 
-**Issue:** Only two negative tests exist (unbalanced parens/brackets). Missing tests for:
-- Invalid escape sequences
-- Invalid quantifier bounds `{5,2}`
-- Invalid character ranges `[z-a]`
-- Invalid group names `(?<123>...)`
+**Status:** Implemented (2024-12-28)
 
-**Location:** `/Users/Shared/Projects/lean-workspace/rune/RuneTests/ParserTests.lean`
+**Description:** Added tests verifying parser returns correct errors for invalid patterns.
 
-**Action Required:** Add tests verifying specific error types are returned.
-
-**Estimated Effort:** Small
+**Test Coverage:** 4 new tests in `ParserTests.lean`:
+- `reject invalid escape sequence` - `\q` throws `invalidEscape`
+- `reject invalid quantifier bounds` - `a{5,2}` throws `invalidQuantifier`
+- `reject invalid character range` - `[z-a]` throws `invalidRange`
+- `reject empty group name` - `(?<>abc)` throws error
 
 ---
 
@@ -468,16 +465,26 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 ## API Enhancements
 
-### [Priority: Medium] Add Regex.escape Function
+### [COMPLETED] Add Regex.escape Function
 
-**Description:** Add a function to escape special characters in a string for use as a literal pattern.
+**Status:** Implemented and tested (2024-12-28)
 
-**Rationale:** Users often need to match literal strings that may contain metacharacters. Currently they must manually escape each character.
+**Description:** Added `Regex.escape` to escape metacharacters for literal matching.
 
-**Affected Files:**
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/API.lean`
+**Changes Made:**
+- Added `escape` function to `Rune/API.lean`
+- Escapes all regex metacharacters: `\[](){}*+?.|^$`
 
-**Estimated Effort:** Small
+**Test Coverage:** 3 new tests in `MatchTests.lean`:
+- `Regex.escape escapes metacharacters` - verifies each metacharacter is escaped
+- `Regex.escape produces valid literal pattern` - verifies escaped pattern matches literally
+- `Regex.escape with all metacharacters` - comprehensive test with all special chars
+
+**Usage:**
+```lean
+Regex.escape "hello.world" == "hello\\.world"
+Regex.escape "[test]" == "\\[test\\]"
+```
 
 ---
 
@@ -578,12 +585,12 @@ let re := regex% "[a-z]+"
 | Category | High | Medium | Low | Completed | Total |
 |----------|------|--------|-----|-----------|-------|
 | Features | 0 | 2 | 2 | 6 | 10 |
-| Improvements | 0 | 2 | 2 | 3 | 7 |
-| Cleanup | 1 | 2 | 2 | 1 | 6 |
-| Tests | 0 | 2 | 0 | 2 | 4 |
-| API | 0 | 2 | 1 | 1 | 4 |
+| Improvements | 0 | 1 | 2 | 4 | 7 |
+| Cleanup | 0 | 2 | 2 | 2 | 6 |
+| Tests | 0 | 1 | 0 | 3 | 4 |
+| API | 0 | 1 | 1 | 2 | 4 |
 | Documentation | 0 | 1 | 1 | 0 | 2 |
-| **Total** | **1** | **11** | **8** | **13** | **33** |
+| **Total** | **0** | **8** | **8** | **17** | **33** |
 
 ### Completed Items
 
@@ -599,12 +606,16 @@ let re := regex% "[a-z]+"
 10. **Regex flags** (2024-12-28) - `(?i)`, `(?m)`, `(?s)` for case-insensitive, multiline, and dotall modes, 19 new tests
 11. **Lookahead assertions** (2024-12-28) - `(?=...)` and `(?!...)` for zero-width pattern matching, 20 new tests
 12. **Compile-time regex validation** (2024-12-28) - `regex%` macro for compile-time pattern validation, 25 new tests
+13. **Remove emptyPattern error** (2024-12-28) - Removed unused error variant from Error.lean
+14. **Regex.escape function** (2024-12-28) - Escape metacharacters for literal matching, 3 new tests
+15. **Negative parser tests** (2024-12-28) - Tests for invalid escapes, quantifiers, ranges, 4 new tests
+16. **Deduplicate compile! helper** (2024-12-28) - Moved to shared TestUtils.lean
 
-**Test count: 201 tests (4 suites)**
+**Test count: 208 tests (4 suites)**
 
 ### Recommended Next Steps
 
 1. **Edge case tests** - Empty groups, nested groups, quantified groups
-2. **Remove emptyPattern error** - Unused error variant cleanup
-3. **Unicode support** - Unicode property escapes `\p{Letter}`, proper codepoint handling
-4. **Capture group iteration API** - Lazy `findIter` for memory-efficient processing
+2. **Unicode support** - Unicode property escapes `\p{Letter}`, proper codepoint handling
+3. **Capture group iteration API** - Lazy `findIter` for memory-efficient processing
+4. **Match position accessors** - `Match.range`, `Match.before`, `Match.after`

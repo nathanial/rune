@@ -35,6 +35,22 @@ def compile! (pattern : String) : Regex :=
   | .ok re => re
   | .error e => panic! s!"Regex.compile! failed: {e}"
 
+/-- Escape all regex metacharacters in a string for use as a literal pattern.
+
+    Example:
+    ```lean
+    Regex.escape "hello.world" == "hello\\.world"
+    Regex.escape "[test]" == "\\[test\\]"
+    ```
+-/
+def escape (s : String) : String :=
+  s.foldl (fun acc c =>
+    if "\\[](){}*+?.|^$".contains c then
+      acc ++ "\\" ++ c.toString
+    else
+      acc.push c
+  ) ""
+
 /-- Get the original pattern string -/
 def getPattern (re : Regex) : String :=
   re.pattern

@@ -15,7 +15,6 @@ inductive ParseError where
   | unbalancedBrackets (pos : Nat)
   | emptyGroup (pos : Nat)
   | invalidGroupName (pos : Nat) (name : String)
-  | emptyPattern
   | invalidRange (pos : Nat) (lo hi : Char)
   deriving Repr, BEq, Inhabited
 
@@ -31,7 +30,6 @@ def position : ParseError → Option Nat
   | unbalancedBrackets pos => some pos
   | emptyGroup pos => some pos
   | invalidGroupName pos _ => some pos
-  | emptyPattern => none
   | invalidRange pos _ _ => some pos
 
 end ParseError
@@ -56,8 +54,6 @@ instance : ToString ParseError where
         s!"position {pos}: empty group"
     | .invalidGroupName pos name =>
         s!"position {pos}: invalid group name '{name}'"
-    | .emptyPattern =>
-        "empty pattern"
     | .invalidRange pos lo hi =>
         s!"position {pos}: invalid character range '{lo}'-'{hi}'"
 

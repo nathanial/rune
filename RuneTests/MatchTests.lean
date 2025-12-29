@@ -1,16 +1,12 @@
 import Rune
 import Crucible
+import RuneTests.TestUtils
 
 namespace RuneTests.MatchTests
 
 open Crucible
 open Rune
-
-/-- Helper to compile a regex or fail -/
-def compile! (pattern : String) : IO Regex := do
-  match Regex.compile pattern with
-  | .ok re => pure re
-  | .error e => throw (IO.userError s!"compile error: {e}")
+open RuneTests
 
 testSuite "Matching"
 
@@ -1169,6 +1165,40 @@ test "lookahead case insensitive" := do
   shouldSatisfy (re.test "FOOBAR") "case insensitive match"
   shouldSatisfy (re.test "FooBar") "mixed case match"
   shouldSatisfy (!re.test "FOOBAZ") "still checks lookahead"
+
+-- ============================================================================
+-- Regex.escape Tests
+-- ============================================================================
+
+test "Regex.escape escapes metacharacters" := do
+  Regex.escape "hello.world" ≡ "hello\\.world"
+  Regex.escape "[a-z]+" ≡ "\\[a-z\\]\\+"
+  Regex.escape "foo|bar" ≡ "foo\\|bar"
+  Regex.escape "a*b+c?" ≡ "a\\*b\\+c\\?"
+  Regex.escape "^start$" ≡ "\\^start\\$"
+  Regex.escape "(group)" ≡ "\\(group\\)"
+  Regex.escape "{1,2}" ≡ "\\{1,2\\}"
+  Regex.escape "normal" ≡ "normal"
+  Regex.escape "" ≡ ""
+
+test "Regex.escape produces valid literal pattern" := do
+  let literal := "price: $10.00 (USD)"
+  let escaped := Regex.escape literal
+  let re ← match Regex.compile escaped with
+    | .ok r => pure r
+    | .error e => throw (IO.userError s!"compile error: {e}")
+  shouldSatisfy (re.test literal) "should match literal"
+  shouldSatisfy (!re.test "price: X10Y00 ZUSD)") "should not match variations"
+
+test "Regex.escape with all metacharacters" := do
+  let allMeta := "\\[](){}*+?.|^$"
+  let escaped := Regex.escape allMeta
+  escaped ≡ "\\\\\\[\\]\\(\\)\\{\\}\\*\\+\\?\\.\\|\\^\\$"
+  -- Verify the escaped pattern compiles and matches
+  let re ← match Regex.compile escaped with
+    | .ok r => pure r
+    | .error e => throw (IO.userError s!"compile error: {e}")
+  shouldSatisfy (re.test allMeta) "should match all metacharacters literally"
 
 #generate_tests
 

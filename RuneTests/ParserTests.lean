@@ -110,6 +110,29 @@ test "reject unbalanced brackets" := do
   | .ok _ => ensure false "should have failed"
   | .error _ => pure ()
 
+test "reject invalid escape sequence" := do
+  match Rune.Parser.parse "\\q" with
+  | .ok _ => ensure false "should have failed"
+  | .error e =>
+    shouldSatisfy (match e with | .invalidEscape _ _ => true | _ => false) "should be invalidEscape"
+
+test "reject invalid quantifier bounds" := do
+  match Rune.Parser.parse "a{5,2}" with
+  | .ok _ => ensure false "should have failed"
+  | .error e =>
+    shouldSatisfy (match e with | .invalidQuantifier _ _ => true | _ => false) "should be invalidQuantifier"
+
+test "reject invalid character range" := do
+  match Rune.Parser.parse "[z-a]" with
+  | .ok _ => ensure false "should have failed"
+  | .error e =>
+    shouldSatisfy (match e with | .invalidRange _ _ _ => true | _ => false) "should be invalidRange"
+
+test "reject empty group name" := do
+  match Rune.Parser.parse "(?<>abc)" with
+  | .ok _ => ensure false "should have failed"
+  | .error _ => pure ()
+
 #generate_tests
 
 end RuneTests.ParserTests
