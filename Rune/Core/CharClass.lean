@@ -112,6 +112,38 @@ def negate (br : BracketExpr) : BracketExpr :=
 def union (a b : BracketExpr) : BracketExpr :=
   { negated := false, elements := a.elements ++ b.elements }
 
+-- Predefined shorthand character classes
+
+/-- \d - digit characters [0-9] -/
+def digit : BracketExpr :=
+  { elements := [.range '0' '9'] }
+
+/-- \D - non-digit characters [^0-9] -/
+def nonDigit : BracketExpr :=
+  { negated := true, elements := [.range '0' '9'] }
+
+/-- \w - word characters [a-zA-Z0-9_] -/
+def word : BracketExpr :=
+  { elements := [.range 'a' 'z', .range 'A' 'Z', .range '0' '9', .single '_'] }
+
+/-- \W - non-word characters [^a-zA-Z0-9_] -/
+def nonWord : BracketExpr :=
+  { negated := true, elements := [.range 'a' 'z', .range 'A' 'Z', .range '0' '9', .single '_'] }
+
+/-- \s - whitespace characters [ \t\n\r\f\v] -/
+def whitespace : BracketExpr :=
+  { elements := [.single ' ', .single '\t', .single '\n', .single '\r',
+                 .single '\x0C', .single '\x0B'] }
+
+/-- \S - non-whitespace characters [^ \t\n\r\f\v] -/
+def nonWhitespace : BracketExpr :=
+  { negated := true, elements := [.single ' ', .single '\t', .single '\n', .single '\r',
+                                   .single '\x0C', .single '\x0B'] }
+
+/-- Check if a character is a word character (for \b boundary checking) -/
+def isWordChar (c : Char) : Bool :=
+  c.isAlphanum || c == '_'
+
 end BracketExpr
 
 end Rune

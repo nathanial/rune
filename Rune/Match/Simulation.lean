@@ -13,15 +13,30 @@ open NFA
 /-- Set of visited states for epsilon closure -/
 abbrev StateSet := Std.HashSet StateId
 
+/-- Check if a character at a position is a word character -/
+def isWordCharAt (input : String) (pos : Nat) : Bool :=
+  if pos < input.length then
+    BracketExpr.isWordChar (input.toList[pos]!)
+  else
+    false
+
+/-- Check if position is at a word boundary -/
+def isAtWordBoundary (input : String) (pos : Nat) : Bool :=
+  let prevIsWord := pos > 0 && isWordCharAt input (pos - 1)
+  let currIsWord := isWordCharAt input pos
+  prevIsWord != currIsWord
+
 /-- Check if an anchor condition is satisfied at the given position -/
-def checkAnchor (label : TransLabel) (pos : Nat) (inputLength : Nat) : Bool :=
+def checkAnchor (label : TransLabel) (input : String) (pos : Nat) : Bool :=
   match label with
   | .anchorStart => pos == 0
-  | .anchorEnd => pos == inputLength
+  | .anchorEnd => pos == input.length
+  | .wordBoundary => isAtWordBoundary input pos
+  | .nonWordBoundary => !isAtWordBoundary input pos
   | _ => true  -- Non-anchor labels always pass
 
 /-- Compute epsilon closure from a set of threads -/
-partial def epsilonClosure (nfa : NFA) (threads : List Thread) (pos : Nat) (inputLength : Nat)
+partial def epsilonClosure (nfa : NFA) (threads : List Thread) (input : String) (pos : Nat)
     : List Thread := Id.run do
   let mut visited : StateSet := {}
   let mut result : List Thread := []
@@ -44,7 +59,7 @@ partial def epsilonClosure (nfa : NFA) (threads : List Thread) (pos : Nat) (inpu
         for t in state.transitions do
           if t.label.isZeroWidth then
             -- Check anchor conditions before following
-            if checkAnchor t.label pos inputLength then
+            if checkAnchor t.label input pos then
               let newThread := thread.applyCaptureOps t.captures pos
               worklist := { newThread with stateId := t.target } :: worklist
           else
@@ -56,7 +71,7 @@ partial def epsilonClosure (nfa : NFA) (threads : List Thread) (pos : Nat) (inpu
   result
 
 /-- Advance threads by one character -/
-def step (nfa : NFA) (threads : List Thread) (c : Char) (pos : Nat) (inputLength : Nat)
+def step (nfa : NFA) (threads : List Thread) (c : Char) (input : String) (pos : Nat)
     : List Thread := Id.run do
   let mut nextThreads : List Thread := []
 
@@ -70,7 +85,7 @@ def step (nfa : NFA) (threads : List Thread) (c : Char) (pos : Nat) (inputLength
           nextThreads := { newThread with stateId := t.target } :: nextThreads
 
   -- Compute epsilon closure of next states
-  epsilonClosure nfa nextThreads (pos + 1) inputLength
+  epsilonClosure nfa nextThreads input (pos + 1)
 
 /-- Check if any thread is in an accept state -/
 def findAcceptingThread (nfa : NFA) (threads : List Thread) : Option Thread :=
@@ -89,9 +104,8 @@ def buildMatch (input : String) (startPos endPos : Nat) (thread : Thread)
 /-- Find a match starting at a specific position -/
 def findMatchAt (nfa : NFA) (input : String) (startPos : Nat) : Option Match := Id.run do
   let initialThread := Thread.initial nfa.start nfa.captureCount
-  let inputLength := input.length
 
-  let mut threads := epsilonClosure nfa [initialThread] startPos inputLength
+  let mut threads := epsilonClosure nfa [initialThread] input startPos
   let mut lastMatch : Option (Thread × Nat) := none
   let mut pos := startPos
 
@@ -102,7 +116,7 @@ def findMatchAt (nfa : NFA) (input : String) (startPos : Nat) : Option Match := 
   -- Process each character
   let chars := input.toList.drop startPos
   for c in chars do
-    threads := step nfa threads c pos inputLength
+    threads := step nfa threads c input pos
     pos := pos + 1
 
     -- Check for match (keep the longest)

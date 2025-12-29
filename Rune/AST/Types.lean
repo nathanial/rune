@@ -72,6 +72,8 @@ inductive Expr where
   | group (kind : GroupKind) (expr : Expr)   -- Grouped expression
   | anchorStart                              -- ^ anchor
   | anchorEnd                                -- $ anchor
+  | wordBoundary                             -- \b anchor
+  | nonWordBoundary                          -- \B anchor
   deriving Repr, BEq, Inhabited
 
 namespace Expr
@@ -95,6 +97,8 @@ partial def canMatchEmpty : Expr → Bool
   | .group _ e => e.canMatchEmpty
   | .anchorStart => true
   | .anchorEnd => true
+  | .wordBoundary => true
+  | .nonWordBoundary => true
 
 end Expr
 

@@ -17,6 +17,8 @@ inductive TransLabel where
   | dot                            -- Any character (except newline)
   | anchorStart                    -- ^ anchor (must be at start of input)
   | anchorEnd                      -- $ anchor (must be at end of input)
+  | wordBoundary                   -- \b anchor (at word/non-word boundary)
+  | nonWordBoundary                -- \B anchor (not at word boundary)
   deriving Repr, BEq, Inhabited
 
 namespace TransLabel
@@ -30,12 +32,16 @@ def test (label : TransLabel) (c : Char) : Bool :=
   | .dot => c != '\n'
   | .anchorStart => false  -- Anchors never match characters
   | .anchorEnd => false
+  | .wordBoundary => false
+  | .nonWordBoundary => false
 
 /-- Check if this is a zero-width transition (epsilon or anchor) -/
 def isZeroWidth : TransLabel → Bool
   | .epsilon => true
   | .anchorStart => true
   | .anchorEnd => true
+  | .wordBoundary => true
+  | .nonWordBoundary => true
   | _ => false
 
 /-- Check if this is an epsilon transition -/

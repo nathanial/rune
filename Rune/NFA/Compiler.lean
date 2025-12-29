@@ -115,6 +115,18 @@ mutual
       Compiler.addTransition start { label := .anchorEnd, target := accept }
       return { start, accept }
 
+    | .wordBoundary =>
+      let start ← Compiler.newState
+      let accept ← Compiler.newState
+      Compiler.addTransition start { label := .wordBoundary, target := accept }
+      return { start, accept }
+
+    | .nonWordBoundary =>
+      let start ← Compiler.newState
+      let accept ← Compiler.newState
+      Compiler.addTransition start { label := .nonWordBoundary, target := accept }
+      return { start, accept }
+
   /-- Compile a quantified expression -/
   partial def compileQuantified (expr : Expr) (q : Quantifier) : Compiler Fragment := do
     match q.min, q.max with

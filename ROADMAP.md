@@ -6,36 +6,42 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 ## Feature Proposals
 
-### [Priority: High] Shorthand Character Classes
+### [COMPLETED] Shorthand Character Classes
 
-**Description:** Add support for common shorthand character classes like `\d`, `\w`, `\s` and their negations (`\D`, `\W`, `\S`).
+**Status:** Implemented and tested (2024-12-28)
 
-**Rationale:** These are standard in most regex implementations (Perl, Python, JavaScript, Rust) and users will expect them. Currently, users must write `[0-9]` instead of `\d`, which is verbose.
+**Description:** Added support for `\d`, `\w`, `\s` and their negations (`\D`, `\W`, `\S`).
 
-**Affected Files:**
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/Parser/Parser.lean` - parseEscape function
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/Core/CharClass.lean` - add predefined bracket expressions
+**Changes Made:**
+- Added predefined `BracketExpr` patterns in `Core/CharClass.lean`: `digit`, `nonDigit`, `word`, `nonWord`, `whitespace`, `nonWhitespace`
+- Updated `parseAtom` in `Parser/Parser.lean` to recognize shorthand escapes and return bracket expressions
+- Added `isWordChar` helper for word boundary checking
 
-**Estimated Effort:** Small
-
-**Dependencies:** None
+**Test Coverage:** 7 new tests in `MatchTests.lean`:
+- `digit class \d`, `non-digit class \D`
+- `word class \w`, `non-word class \W`
+- `whitespace class \s`, `non-whitespace class \S`
+- `combined shorthand classes`
 
 ---
 
-### [Priority: High] Word Boundary Anchors
+### [COMPLETED] Word Boundary Anchors
 
-**Description:** Add support for `\b` (word boundary) and `\B` (non-word boundary) anchors.
+**Status:** Implemented and tested (2024-12-28)
 
-**Rationale:** Word boundaries are essential for matching whole words (e.g., `\bword\b` matches "word" but not "password"). Currently there's no way to express this constraint.
+**Description:** Added support for `\b` (word boundary) and `\B` (non-word boundary) anchors.
 
-**Affected Files:**
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/AST/Types.lean` - add `anchorWordBoundary` and `anchorNonWordBoundary` variants
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/Parser/Parser.lean` - parse `\b` and `\B`
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/Match/Simulation.lean` - implement boundary checking
+**Changes Made:**
+- Added `wordBoundary` and `nonWordBoundary` variants to `Expr` in `AST/Types.lean`
+- Added corresponding `TransLabel` variants in `NFA/Types.lean`
+- Updated parser to recognize `\b` and `\B` escapes
+- Updated compiler to emit word boundary transitions
+- Added `isWordCharAt` and `isAtWordBoundary` helpers in `Simulation.lean`
+- Updated `checkAnchor` to validate word boundary conditions
 
-**Estimated Effort:** Medium
-
-**Dependencies:** None
+**Test Coverage:** 6 new tests in `MatchTests.lean`:
+- `word boundary \b basic`, `word boundary at start`, `word boundary at end`
+- `non-word boundary \B`, `word boundary with digits`, `word boundary findAll`
 
 ---
 
@@ -509,22 +515,26 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 | Category | High | Medium | Low | Completed | Total |
 |----------|------|--------|-----|-----------|-------|
-| Features | 2 | 5 | 2 | 1 | 10 |
+| Features | 0 | 5 | 2 | 3 | 10 |
 | Improvements | 2 | 3 | 2 | 0 | 7 |
 | Cleanup | 1 | 2 | 3 | 0 | 6 |
 | Tests | 0 | 2 | 1 | 1 | 4 |
 | API | 0 | 2 | 2 | 0 | 4 |
 | Documentation | 0 | 1 | 1 | 0 | 2 |
-| **Total** | **5** | **15** | **11** | **2** | **33** |
+| **Total** | **3** | **15** | **11** | **4** | **33** |
 
 ### Completed Items
 
 1. **Anchor enforcement** (2024-12-28) - `^` and `$` anchors now correctly enforce position constraints
-2. **Anchor behavior tests** (2024-12-28) - 9 comprehensive tests added (61 total tests now pass)
+2. **Anchor behavior tests** (2024-12-28) - 9 comprehensive tests added
+3. **Shorthand character classes** (2024-12-28) - `\d`, `\w`, `\s` and negations implemented with 7 tests
+4. **Word boundary anchors** (2024-12-28) - `\b` and `\B` implemented with 6 tests
+
+**Test count: 74 tests (was 52)**
 
 ### Recommended Next Steps
 
-1. **Add shorthand classes** (`\d`, `\w`, `\s`) - High value, low effort feature addition
-2. **Add word boundary anchors** (`\b`, `\B`) - Natural follow-up to anchor work
-3. **Optimize string iteration** - Quick performance win
-4. **Add POSIX class tests** - Validate existing but untested functionality
+1. **Optimize string iteration** - Quick performance win (`input.toList.drop` allocates per position)
+2. **Add POSIX class tests** - Validate existing but untested functionality
+3. **Lazy quantifiers** (`*?`, `+?`) - Commonly needed feature
+4. **Regex flags** (`(?i)`, `(?m)`) - Case-insensitive and multiline modes

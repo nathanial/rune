@@ -316,8 +316,20 @@ mutual
       parseGroup
     | '\\' =>
       discard Parser.next
-      let ec ← Parser.parseEscape
-      return .literal ec
+      -- Check for shorthand classes and anchors before regular escapes
+      let esc ← Parser.peek
+      match esc with
+      | 'd' => discard Parser.next; return .bracket BracketExpr.digit
+      | 'D' => discard Parser.next; return .bracket BracketExpr.nonDigit
+      | 'w' => discard Parser.next; return .bracket BracketExpr.word
+      | 'W' => discard Parser.next; return .bracket BracketExpr.nonWord
+      | 's' => discard Parser.next; return .bracket BracketExpr.whitespace
+      | 'S' => discard Parser.next; return .bracket BracketExpr.nonWhitespace
+      | 'b' => discard Parser.next; return .wordBoundary
+      | 'B' => discard Parser.next; return .nonWordBoundary
+      | _ =>
+        let ec ← Parser.parseEscape
+        return .literal ec
     | _ =>
       if Parser.isMetaChar c then
         let pos ← Parser.getPos
