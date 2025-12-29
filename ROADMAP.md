@@ -581,9 +581,9 @@ let re := regex% "[a-z]+"
 | Improvements | 0 | 2 | 2 | 3 | 7 |
 | Cleanup | 1 | 2 | 2 | 1 | 6 |
 | Tests | 0 | 2 | 0 | 2 | 4 |
-| API | 0 | 2 | 2 | 0 | 4 |
+| API | 0 | 2 | 1 | 1 | 4 |
 | Documentation | 0 | 1 | 1 | 0 | 2 |
-| **Total** | **1** | **11** | **9** | **12** | **33** |
+| **Total** | **1** | **11** | **8** | **13** | **33** |
 
 ### Completed Items
 
@@ -598,8 +598,9 @@ let re := regex% "[a-z]+"
 9. **Lazy quantifiers** (2024-12-28) - `*?`, `+?`, `??`, `{n,m}?` for non-greedy matching, 24 new tests
 10. **Regex flags** (2024-12-28) - `(?i)`, `(?m)`, `(?s)` for case-insensitive, multiline, and dotall modes, 19 new tests
 11. **Lookahead assertions** (2024-12-28) - `(?=...)` and `(?!...)` for zero-width pattern matching, 20 new tests
+12. **Compile-time regex validation** (2024-12-28) - `regex%` macro for compile-time pattern validation, 25 new tests
 
-**Test count: 176 tests**
+**Test count: 201 tests (4 suites)**
 
 ### Recommended Next Steps
 
