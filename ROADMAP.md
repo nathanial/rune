@@ -494,17 +494,40 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 ---
 
-### [Priority: Low] Add Compile-Time Regex Validation
+### [COMPLETED] Compile-Time Regex Validation
 
-**Description:** Create an `regex%` macro that validates patterns at compile time.
+**Status:** Implemented and tested (2024-12-28)
 
-**Rationale:** Catch pattern errors during compilation rather than at runtime.
+**Description:** Added `regex%` macro that validates patterns at compile time.
 
-**Affected Files:**
-- Create: `/Users/Shared/Projects/lean-workspace/rune/Rune/Macro.lean`
-- `/Users/Shared/Projects/lean-workspace/rune/Rune.lean`
+**Changes Made:**
+- Created `Rune/Macro.lean` with `regex%` term elaborator
+- Added `Regex.compile!` unsafe helper in `API.lean` (panics on invalid pattern)
+- Macro parses pattern at compile time using existing parser
+- Invalid patterns report compile-time errors with detailed messages
+- Valid patterns generate `compile!` calls (guaranteed to succeed since pre-validated)
+- Added `Inhabited` instances to `NFA` and `Regex` for `panic!` support
 
-**Estimated Effort:** Medium
+**Key Design Decision:** Rather than implementing `Quote` instances for all NFA types
+(~200 lines of boilerplate), the macro validates at compile time but defers NFA
+construction to runtime. This achieves the same user benefit with minimal code.
+
+**Test Coverage:** 25 new tests in `MacroTests.lean`:
+- Basic patterns, escape sequences, character classes
+- Anchors, word boundaries, groups (numbered and named)
+- Quantifiers (greedy and lazy), lookahead assertions
+- Flags (case-insensitive, multiline, dotall)
+- Pattern preservation, findAll, count
+
+**Usage:**
+```lean
+-- Validated at compile time - returns Regex (not Except)
+let re := regex% "[a-z]+"
+
+-- Invalid patterns fail to compile:
+-- let bad := regex% "[unclosed"
+-- Error: regex pattern error: position 0: unbalanced brackets
+```
 
 ---
 

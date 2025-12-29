@@ -118,7 +118,7 @@ structure NFA where
   multiline : Bool := false             -- (?m) flag
   dotAll : Bool := false                -- (?s) flag
   subNFAs : Array NFA := #[]            -- Sub-NFAs for lookahead assertions
-  deriving Repr
+  deriving Repr, Inhabited
 
 namespace NFA
 

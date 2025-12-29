@@ -4,6 +4,7 @@ import Crucible
 import RuneTests.ParserTests
 import RuneTests.MatchTests
 import RuneTests.ReplaceTests
+import RuneTests.MacroTests
 
 open Crucible
 

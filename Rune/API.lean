@@ -17,7 +17,7 @@ structure Regex where
   private mk ::
   nfa : NFA.NFA
   pattern : String
-  deriving Repr
+  deriving Repr, Inhabited
 
 namespace Regex
 
@@ -26,6 +26,14 @@ def compile (pattern : String) : Except ParseError Regex := do
   let ast ← Parser.parse pattern
   let nfa := NFA.compile ast
   return { nfa, pattern }
+
+/-- Compile a regex pattern (panics on invalid pattern).
+    Use `regex%` macro for compile-time validation, or
+    `compile` for dynamic patterns. -/
+def compile! (pattern : String) : Regex :=
+  match compile pattern with
+  | .ok re => re
+  | .error e => panic! s!"Regex.compile! failed: {e}"
 
 /-- Get the original pattern string -/
 def getPattern (re : Regex) : String :=

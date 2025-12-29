@@ -79,3 +79,6 @@ import Rune.Match.Simulation
 -- Public API
 import Rune.API
 import Rune.Replace
+
+-- Compile-time macro
+import Rune.Macro
