@@ -16,7 +16,7 @@ A regular expression library for Lean 4 implementing POSIX Extended Regular Expr
 Add to your `lakefile.lean`:
 
 ```lean
-require rune from ".." / "rune"  -- adjust path as needed
+require rune from git "https://github.com/nathanial/rune" @ "v0.0.1"
 ```
 
 ## Quick Start
