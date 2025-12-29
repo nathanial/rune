@@ -12,6 +12,11 @@ structure CompilerState where
   nextStateId : StateId := 0
   states : Array State := #[]
   hasLazyQuantifier : Bool := false
+  subNFAs : Array NFA := #[]  -- Sub-NFAs for lookahead assertions
+  -- Flags inherited from parent pattern for sub-NFA compilation
+  caseInsensitive : Bool := false
+  multiline : Bool := false
+  dotAll : Bool := false
   deriving Repr
 
 /-- Compiler monad -/
@@ -42,6 +47,13 @@ def addEpsilon (from_ to : StateId) (captures : List CaptureOp := []) : Compiler
 /-- Mark that we've used a lazy quantifier -/
 def markLazyQuantifier : Compiler Unit :=
   modify fun s => { s with hasLazyQuantifier := true }
+
+/-- Register a sub-NFA for lookahead and return its index -/
+def registerSubNFA (subNFA : NFA) : Compiler Nat := do
+  let s ← get
+  let idx := s.subNFAs.size
+  set { s with subNFAs := s.subNFAs.push subNFA }
+  return idx
 
 end Compiler
 
@@ -132,6 +144,62 @@ mutual
       let start ← Compiler.newState
       let accept ← Compiler.newState
       Compiler.addTransition start { label := .nonWordBoundary, target := accept }
+      return { start, accept }
+
+    | .positiveLookahead inner => do
+      -- Compile the inner expression to a separate sub-NFA, inheriting parent flags
+      let parentState ← get
+      let (innerFrag, innerState) := compileExpr inner |>.run {
+        nextStateId := 0
+        caseInsensitive := parentState.caseInsensitive
+        multiline := parentState.multiline
+        dotAll := parentState.dotAll
+      }
+      let innerStates := innerState.states.map fun s =>
+        if s.id == innerFrag.accept then { s with isAccept := true } else s
+      let subNFA : NFA := {
+        states := innerStates
+        start := innerFrag.start
+        accept := innerFrag.accept
+        captureCount := 0  -- Lookahead captures are discarded
+        namedGroups := []
+        subNFAs := innerState.subNFAs  -- Nested lookaheads
+        caseInsensitive := parentState.caseInsensitive
+        multiline := parentState.multiline
+        dotAll := parentState.dotAll
+      }
+      let idx ← Compiler.registerSubNFA subNFA
+      let start ← Compiler.newState
+      let accept ← Compiler.newState
+      Compiler.addTransition start { label := .positiveLookahead idx, target := accept }
+      return { start, accept }
+
+    | .negativeLookahead inner => do
+      -- Compile the inner expression to a separate sub-NFA, inheriting parent flags
+      let parentState ← get
+      let (innerFrag, innerState) := compileExpr inner |>.run {
+        nextStateId := 0
+        caseInsensitive := parentState.caseInsensitive
+        multiline := parentState.multiline
+        dotAll := parentState.dotAll
+      }
+      let innerStates := innerState.states.map fun s =>
+        if s.id == innerFrag.accept then { s with isAccept := true } else s
+      let subNFA : NFA := {
+        states := innerStates
+        start := innerFrag.start
+        accept := innerFrag.accept
+        captureCount := 0  -- Lookahead captures are discarded
+        namedGroups := []
+        subNFAs := innerState.subNFAs  -- Nested lookaheads
+        caseInsensitive := parentState.caseInsensitive
+        multiline := parentState.multiline
+        dotAll := parentState.dotAll
+      }
+      let idx ← Compiler.registerSubNFA subNFA
+      let start ← Compiler.newState
+      let accept ← Compiler.newState
+      Compiler.addTransition start { label := .negativeLookahead idx, target := accept }
       return { start, accept }
 
   /-- Compile a quantified expression -/
@@ -250,7 +318,12 @@ end
 
 /-- Compile a regex AST to an NFA -/
 def compile (ast : RegexAST) : NFA :=
-  let (frag, finalState) := compileExpr ast.root |>.run {}
+  let initialState : CompilerState := {
+    caseInsensitive := ast.flags.caseInsensitive
+    multiline := ast.flags.multiline
+    dotAll := ast.flags.dotAll
+  }
+  let (frag, finalState) := compileExpr ast.root |>.run initialState
   let states := finalState.states.map fun s =>
     if s.id == frag.accept then { s with isAccept := true } else s
   {
@@ -262,7 +335,8 @@ def compile (ast : RegexAST) : NFA :=
     prefersShortestMatch := finalState.hasLazyQuantifier,
     caseInsensitive := ast.flags.caseInsensitive,
     multiline := ast.flags.multiline,
-    dotAll := ast.flags.dotAll
+    dotAll := ast.flags.dotAll,
+    subNFAs := finalState.subNFAs
   }
 
 end Rune.NFA

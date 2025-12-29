@@ -90,21 +90,31 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 ---
 
-### [Priority: Medium] Lookahead Assertions
+### [COMPLETED] Lookahead Assertions
 
-**Description:** Add support for positive lookahead `(?=...)` and negative lookahead `(?!...)`.
+**Status:** Implemented and tested (2024-12-28)
 
-**Rationale:** Lookaheads are commonly needed for password validation, parsing complex formats, and other advanced patterns. They're standard in most modern regex engines.
+**Description:** Added support for positive lookahead `(?=...)` and negative lookahead `(?!...)`.
 
-**Affected Files:**
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/AST/Types.lean` - add lookahead expression variants
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/Parser/Parser.lean` - parse lookahead syntax
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/NFA/Compiler.lean` - compile lookahead (may need sub-NFA)
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/Match/Simulation.lean` - implement lookahead evaluation
+**Changes Made:**
+- Added `positiveLookahead` and `negativeLookahead` variants to `Expr` in `AST/Types.lean`
+- Added corresponding `TransLabel` variants in `NFA/Types.lean` with sub-NFA index references
+- Added `subNFAs : Array NFA` field to NFA structure for storing lookahead patterns
+- Updated parser to recognize `(?=...)` and `(?!...)` syntax in groups
+- Compiler creates separate sub-NFAs for lookahead patterns with flag inheritance
+- Added `evaluateLookahead` function in simulation to run sub-NFA matching at current position
+- Updated `epsilonClosure` to handle lookahead transitions as zero-width assertions
+- Supports nested lookaheads (sub-NFAs can reference their own sub-NFAs)
 
-**Estimated Effort:** Large
-
-**Dependencies:** None
+**Test Coverage:** 20 new tests in `MatchTests.lean`:
+- Basic positive/negative lookahead
+- Lookahead does not consume input
+- Lookahead with findAll
+- Nested lookaheads (positive in positive, negative in positive)
+- Lookahead with quantifiers, alternation, character classes
+- Multiple consecutive lookaheads (password validation pattern)
+- Lookahead with anchors, word boundaries, captures
+- Case-insensitive lookahead (flag inheritance)
 
 ---
 
@@ -544,13 +554,13 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 | Category | High | Medium | Low | Completed | Total |
 |----------|------|--------|-----|-----------|-------|
-| Features | 0 | 3 | 2 | 5 | 10 |
+| Features | 0 | 2 | 2 | 6 | 10 |
 | Improvements | 0 | 2 | 2 | 3 | 7 |
 | Cleanup | 1 | 2 | 2 | 1 | 6 |
 | Tests | 0 | 2 | 0 | 2 | 4 |
 | API | 0 | 2 | 2 | 0 | 4 |
 | Documentation | 0 | 1 | 1 | 0 | 2 |
-| **Total** | **1** | **12** | **9** | **11** | **33** |
+| **Total** | **1** | **11** | **9** | **12** | **33** |
 
 ### Completed Items
 
@@ -564,12 +574,13 @@ This document tracks potential improvements, new features, and code cleanup oppo
 8. **Pre-compiled character classes** (2024-12-28) - 128-bit ASCII bitmap for O(1) lookup, 23 new edge case tests
 9. **Lazy quantifiers** (2024-12-28) - `*?`, `+?`, `??`, `{n,m}?` for non-greedy matching, 24 new tests
 10. **Regex flags** (2024-12-28) - `(?i)`, `(?m)`, `(?s)` for case-insensitive, multiline, and dotall modes, 19 new tests
+11. **Lookahead assertions** (2024-12-28) - `(?=...)` and `(?!...)` for zero-width pattern matching, 20 new tests
 
-**Test count: 156 tests**
+**Test count: 176 tests**
 
 ### Recommended Next Steps
 
 1. **Edge case tests** - Empty groups, nested groups, quantified groups
-2. **Lookahead assertions** (`(?=...)`, `(?!...)`) - Password validation, advanced patterns
-3. **Remove emptyPattern error** - Unused error variant cleanup
-4. **Unicode support** - Unicode property escapes `\p{Letter}`, proper codepoint handling
+2. **Remove emptyPattern error** - Unused error variant cleanup
+3. **Unicode support** - Unicode property escapes `\p{Letter}`, proper codepoint handling
+4. **Capture group iteration API** - Lazy `findIter` for memory-efficient processing

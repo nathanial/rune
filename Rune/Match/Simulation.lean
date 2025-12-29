@@ -47,42 +47,149 @@ def checkAnchor (label : TransLabel) (input : String) (pos : Nat) (multiline : B
     if multiline then isAtLineEnd input pos else pos == input.length
   | .wordBoundary => isAtWordBoundary input pos
   | .nonWordBoundary => !isAtWordBoundary input pos
+  | .positiveLookahead _ => false  -- Handled separately in epsilonClosure
+  | .negativeLookahead _ => false  -- Handled separately in epsilonClosure
   | _ => true  -- Non-anchor labels always pass
 
-/-- Compute epsilon closure from a set of threads (using Array for performance) -/
-partial def epsilonClosure (nfa : NFA) (threads : Array Thread) (input : String) (pos : Nat)
-    : Array Thread := Id.run do
-  let mut visited : StateSet := {}
-  let mut result : Array Thread := #[]
-  let mut worklist := threads
-  let mut idx := 0
+mutual
+  /-- Evaluate a lookahead sub-NFA at the current position.
+      Returns true if the sub-NFA can match starting at pos. -/
+  partial def evaluateLookahead (nfa : NFA) (subNFAIndex : Nat) (input : String) (pos : Nat)
+      : Bool := Id.run do
+    -- Get the sub-NFA from the NFA's registry
+    match nfa.subNFAs[subNFAIndex]? with
+    | none => return false  -- Invalid index
+    | some subNFA =>
+      -- Create initial thread for sub-NFA (no captures needed)
+      let initialThread := Thread.initial subNFA.start 0
 
-  while idx < worklist.size do
-    let thread := worklist[idx]!
-    idx := idx + 1
+      -- Compute epsilon closure at current position
+      let mut threads := epsilonClosureForLookahead subNFA #[initialThread] input pos
 
-    if visited.contains thread.stateId then
-      continue
-    visited := visited.insert thread.stateId
+      -- Check for immediate match
+      if threads.any fun t => subNFA.isAcceptState t.stateId then
+        return true
 
-    match nfa.getState thread.stateId with
-    | none => continue
-    | some state =>
-      -- Process all zero-width transitions (epsilon and anchors)
-      let mut hasCharTransition := false
-      for t in state.transitions do
-        if t.label.isZeroWidth then
-          -- Check anchor conditions before following (respecting multiline flag)
-          if checkAnchor t.label input pos nfa.multiline then
-            let newThread := thread.applyCaptureOps t.captures pos
-            worklist := worklist.push { newThread with stateId := t.target }
-        else
-          hasCharTransition := true
-      -- If this state has character transitions, add to result
-      if hasCharTransition || state.isAccept then
-        result := result.push thread
+      -- Process remaining input
+      let chars := input.toList.toArray
+      let inputLen := chars.size
+      let mut currentPos := pos
 
-  result
+      while currentPos < inputLen do
+        let c := chars[currentPos]!
+
+        -- Step: advance threads by one character
+        let mut nextThreads : Array Thread := #[]
+        for thread in threads do
+          match subNFA.getState thread.stateId with
+          | none => continue
+          | some state =>
+            for t in state.transitions do
+              if t.label.test c subNFA.caseInsensitive subNFA.dotAll then
+                nextThreads := nextThreads.push { thread with stateId := t.target }
+
+        -- Compute epsilon closure of next states
+        threads := epsilonClosureForLookahead subNFA nextThreads input (currentPos + 1)
+        currentPos := currentPos + 1
+
+        -- Check for match
+        if threads.any fun t => subNFA.isAcceptState t.stateId then
+          return true
+
+        if threads.size == 0 then
+          break
+
+      return false
+
+  /-- Epsilon closure for lookahead evaluation (handles nested lookaheads) -/
+  partial def epsilonClosureForLookahead (subNFA : NFA) (threads : Array Thread)
+      (input : String) (pos : Nat) : Array Thread := Id.run do
+    let mut visited : StateSet := {}
+    let mut result : Array Thread := #[]
+    let mut worklist := threads
+    let mut idx := 0
+
+    while idx < worklist.size do
+      let thread := worklist[idx]!
+      idx := idx + 1
+
+      if visited.contains thread.stateId then
+        continue
+      visited := visited.insert thread.stateId
+
+      match subNFA.getState thread.stateId with
+      | none => continue
+      | some state =>
+        let mut hasCharTransition := false
+        for t in state.transitions do
+          if t.label.isZeroWidth then
+            -- Check anchors
+            if checkAnchor t.label input pos subNFA.multiline then
+              worklist := worklist.push { thread with stateId := t.target }
+            else
+              -- Handle nested lookaheads using THIS sub-NFA's sub-NFA registry
+              match t.label with
+              | .positiveLookahead subIdx =>
+                if evaluateLookahead subNFA subIdx input pos then
+                  worklist := worklist.push { thread with stateId := t.target }
+              | .negativeLookahead subIdx =>
+                if !evaluateLookahead subNFA subIdx input pos then
+                  worklist := worklist.push { thread with stateId := t.target }
+              | _ => pure ()
+          else
+            hasCharTransition := true
+        if hasCharTransition || state.isAccept then
+          result := result.push thread
+
+    result
+
+  /-- Compute epsilon closure from a set of threads (using Array for performance) -/
+  partial def epsilonClosure (nfa : NFA) (threads : Array Thread) (input : String) (pos : Nat)
+      : Array Thread := Id.run do
+    let mut visited : StateSet := {}
+    let mut result : Array Thread := #[]
+    let mut worklist := threads
+    let mut idx := 0
+
+    while idx < worklist.size do
+      let thread := worklist[idx]!
+      idx := idx + 1
+
+      if visited.contains thread.stateId then
+        continue
+      visited := visited.insert thread.stateId
+
+      match nfa.getState thread.stateId with
+      | none => continue
+      | some state =>
+        -- Process all zero-width transitions (epsilon and anchors)
+        let mut hasCharTransition := false
+        for t in state.transitions do
+          if t.label.isZeroWidth then
+            -- Check anchor conditions before following (respecting multiline flag)
+            if checkAnchor t.label input pos nfa.multiline then
+              let newThread := thread.applyCaptureOps t.captures pos
+              worklist := worklist.push { newThread with stateId := t.target }
+            else
+              -- Handle lookahead transitions
+              match t.label with
+              | .positiveLookahead subIdx =>
+                if evaluateLookahead nfa subIdx input pos then
+                  let newThread := thread.applyCaptureOps t.captures pos
+                  worklist := worklist.push { newThread with stateId := t.target }
+              | .negativeLookahead subIdx =>
+                if !evaluateLookahead nfa subIdx input pos then
+                  let newThread := thread.applyCaptureOps t.captures pos
+                  worklist := worklist.push { newThread with stateId := t.target }
+              | _ => pure ()
+          else
+            hasCharTransition := true
+        -- If this state has character transitions, add to result
+        if hasCharTransition || state.isAccept then
+          result := result.push thread
+
+    result
+end
 
 /-- Advance threads by one character (using Array for performance) -/
 def step (nfa : NFA) (threads : Array Thread) (c : Char) (input : String) (pos : Nat)

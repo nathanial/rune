@@ -1043,6 +1043,133 @@ test "empty flags group" := do
   shouldSatisfy (re.test "hello") "non-capturing group works"
   shouldSatisfy (!re.test "HELLO") "no case insensitive without i flag"
 
+-- ============================================
+-- Lookahead Assertions Tests
+-- ============================================
+
+test "positive lookahead basic" := do
+  let re ← compile! "foo(?=bar)"
+  shouldSatisfy (re.test "foobar") "should match 'foo' when followed by 'bar'"
+  shouldSatisfy (!re.test "foobaz") "should not match when followed by 'baz'"
+  shouldSatisfy (!re.test "foo") "should not match 'foo' alone"
+
+test "positive lookahead does not consume" := do
+  let re ← compile! "foo(?=bar)bar"
+  shouldSatisfy (re.test "foobar") "lookahead doesn't consume, so 'bar' can match after"
+  if let some m := re.find "foobar" then
+    m.text ≡ "foobar"  -- Full pattern matches
+
+test "positive lookahead match text" := do
+  let re ← compile! "\\w+(?=,)"
+  if let some m := re.find "hello, world" then
+    m.text ≡ "hello"  -- Matches word before comma, comma not consumed
+  let results := re.findAll "a,b,c,d"
+  results.length ≡ 3  -- "a", "b", "c" (not "d" - no comma after)
+
+test "negative lookahead basic" := do
+  let re ← compile! "foo(?!bar)"
+  shouldSatisfy (!re.test "foobar") "should not match when followed by 'bar'"
+  shouldSatisfy (re.test "foobaz") "should match when followed by 'baz'"
+  shouldSatisfy (re.test "foo") "should match 'foo' at end"
+
+test "negative lookahead match text" := do
+  let re ← compile! "\\d+(?!px)"
+  -- Note: Due to greedy matching, \d+ at position 0 matches "1" (since "0px" doesn't start with "px")
+  -- This is correct Thompson NFA behavior (no backtracking within \d+)
+  if let some m := re.find "10px 20em" then
+    m.text ≡ "1"  -- First digit that isn't immediately followed by "px"
+  -- For cleaner semantics, use atomic groups or word boundaries
+  let re2 ← compile! "\\b\\d+\\b(?!px)"
+  shouldSatisfy (!re2.test "10px") "word boundary prevents partial match"
+
+test "negative lookahead password validation" := do
+  -- Password must not start with "admin"
+  let re ← compile! "^(?!admin)\\w+"
+  shouldSatisfy (re.test "user123") "should match 'user123'"
+  shouldSatisfy (!re.test "admin123") "should not match 'admin123'"
+  shouldSatisfy (!re.test "administrator") "should not match word starting with admin"
+  shouldSatisfy (re.test "adm") "should match 'adm' (not full 'admin')"
+
+test "lookahead with character class" := do
+  let re ← compile! "[a-z]+(?=[0-9])"
+  if let some m := re.find "abc123" then
+    m.text ≡ "abc"
+  shouldSatisfy (!re.test "abcdef") "should not match without digit following"
+
+test "lookahead with dot" := do
+  let re ← compile! "a(?=.b)"
+  shouldSatisfy (re.test "axb") "should match 'a' when followed by any char then 'b'"
+  shouldSatisfy (!re.test "ab") "should not match when only 'b' follows"
+
+test "lookahead at start of pattern" := do
+  let re ← compile! "(?=.*\\d)\\w+"
+  shouldSatisfy (re.test "abc123") "word containing digit"
+  shouldSatisfy (!re.test "abcdef") "word without digit should not match"
+
+test "lookahead with quantifiers" := do
+  let re ← compile! "(?=a+b)a+"
+  if let some m := re.find "aaab" then
+    m.text ≡ "aaa"  -- Matches all a's, lookahead verifies b follows
+  shouldSatisfy (!re.test "aaa") "should not match without b"
+
+test "lookahead with alternation" := do
+  let re ← compile! "(?=cat|dog)\\w+"
+  shouldSatisfy (re.test "cat") "should match 'cat'"
+  shouldSatisfy (re.test "dog") "should match 'dog'"
+  shouldSatisfy (!re.test "bird") "should not match 'bird'"
+
+test "multiple consecutive lookaheads" := do
+  -- Pattern requiring both digit and letter
+  let re ← compile! "^(?=.*[0-9])(?=.*[a-z]).+$"
+  shouldSatisfy (re.test "abc123") "has both letter and digit"
+  shouldSatisfy (re.test "1a") "minimal case"
+  shouldSatisfy (!re.test "123456") "digits only should not match"
+  shouldSatisfy (!re.test "abcdef") "letters only should not match"
+
+test "nested positive lookahead" := do
+  let re ← compile! "(?=a(?=b))ab"
+  shouldSatisfy (re.test "ab") "nested lookahead should work"
+  shouldSatisfy (!re.test "ac") "should not match 'ac'"
+
+test "nested negative in positive" := do
+  let re ← compile! "(?=a(?!c))a."
+  shouldSatisfy (re.test "ab") "a followed by non-c"
+  shouldSatisfy (!re.test "ac") "a followed by c should not match"
+
+test "lookahead with anchors" := do
+  let re ← compile! "^(?=.*end$).*"
+  shouldSatisfy (re.test "the end") "line ending with 'end'"
+  shouldSatisfy (!re.test "endless") "not ending with 'end'"
+
+test "lookahead with word boundary" := do
+  let re ← compile! "\\b(?=\\w{5}\\b)\\w+"
+  if let some m := re.find "hello world" then
+    m.text ≡ "hello"  -- Exactly 5 chars
+  -- "there" is 5 chars, so it matches
+  if let some m := re.find "hi there" then
+    m.text ≡ "there"
+  shouldSatisfy (!re.test "hi") "'hi' alone doesn't have 5 char word"
+
+test "lookahead empty pattern" := do
+  let re ← compile! "a(?=)b"
+  shouldSatisfy (re.test "ab") "empty lookahead always succeeds"
+
+test "negative lookahead empty pattern" := do
+  let re ← compile! "a(?!)b"
+  shouldSatisfy (!re.test "ab") "empty negative lookahead always fails"
+
+test "lookahead with captures before" := do
+  let re ← compile! "(foo)(?=bar)"
+  if let some m := re.find "foobar" then
+    m.text ≡ "foo"
+    m.group 1 ≡ some "foo"  -- Capture still works
+
+test "lookahead case insensitive" := do
+  let re ← compile! "(?i)foo(?=bar)"
+  shouldSatisfy (re.test "FOOBAR") "case insensitive match"
+  shouldSatisfy (re.test "FooBar") "mixed case match"
+  shouldSatisfy (!re.test "FOOBAZ") "still checks lookahead"
+
 #generate_tests
 
 end RuneTests.MatchTests

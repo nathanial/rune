@@ -88,6 +88,8 @@ inductive Expr where
   | anchorEnd                                -- $ anchor
   | wordBoundary                             -- \b anchor
   | nonWordBoundary                          -- \B anchor
+  | positiveLookahead (expr : Expr)          -- (?=...) positive lookahead
+  | negativeLookahead (expr : Expr)          -- (?!...) negative lookahead
   deriving Repr, BEq, Inhabited
 
 namespace Expr
@@ -113,6 +115,8 @@ partial def canMatchEmpty : Expr → Bool
   | .anchorEnd => true
   | .wordBoundary => true
   | .nonWordBoundary => true
+  | .positiveLookahead _ => true  -- Zero-width, always matches empty
+  | .negativeLookahead _ => true  -- Zero-width, always matches empty
 
 end Expr
 

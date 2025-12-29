@@ -19,6 +19,8 @@ inductive TransLabel where
   | anchorEnd                      -- $ anchor (must be at end of input)
   | wordBoundary                   -- \b anchor (at word/non-word boundary)
   | nonWordBoundary                -- \B anchor (not at word boundary)
+  | positiveLookahead (nfaIndex : Nat)  -- (?=...) references sub-NFA by index
+  | negativeLookahead (nfaIndex : Nat)  -- (?!...) references sub-NFA by index
   deriving Repr, BEq, Inhabited
 
 namespace TransLabel
@@ -47,14 +49,18 @@ def test (label : TransLabel) (c : Char) (caseInsensitive : Bool := false) (dotA
   | .anchorEnd => false
   | .wordBoundary => false
   | .nonWordBoundary => false
+  | .positiveLookahead _ => false  -- Lookaheads are zero-width
+  | .negativeLookahead _ => false
 
-/-- Check if this is a zero-width transition (epsilon or anchor) -/
+/-- Check if this is a zero-width transition (epsilon or anchor or lookahead) -/
 def isZeroWidth : TransLabel → Bool
   | .epsilon => true
   | .anchorStart => true
   | .anchorEnd => true
   | .wordBoundary => true
   | .nonWordBoundary => true
+  | .positiveLookahead _ => true
+  | .negativeLookahead _ => true
   | _ => false
 
 /-- Check if this is an epsilon transition -/
@@ -111,6 +117,7 @@ structure NFA where
   caseInsensitive : Bool := false       -- (?i) flag
   multiline : Bool := false             -- (?m) flag
   dotAll : Bool := false                -- (?s) flag
+  subNFAs : Array NFA := #[]            -- Sub-NFAs for lookahead assertions
   deriving Repr
 
 namespace NFA

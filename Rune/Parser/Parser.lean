@@ -419,6 +419,26 @@ mutual
           return .group (GroupKind.named name idx) inner
         | _ =>
           throw (.unbalancedParens pos)
+      | some '=' =>
+        -- Positive lookahead (?=...)
+        discard Parser.next
+        let inner ← parseRegex
+        match ← Parser.peek? with
+        | some ')' =>
+          discard Parser.next
+          return .positiveLookahead inner
+        | _ =>
+          throw (.unbalancedParens pos)
+      | some '!' =>
+        -- Negative lookahead (?!...)
+        discard Parser.next
+        let inner ← parseRegex
+        match ← Parser.peek? with
+        | some ')' =>
+          discard Parser.next
+          return .negativeLookahead inner
+        | _ =>
+          throw (.unbalancedParens pos)
       | some c =>
         if Parser.isFlagChar c then
           -- Flag group: (?i), (?im), (?i:...), etc.
