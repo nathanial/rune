@@ -13,12 +13,16 @@ open NFA
 /-- Set of visited states for epsilon closure -/
 abbrev StateSet := Std.HashSet StateId
 
-/-- Check if a character at a position is a word character -/
-def isWordCharAt (input : String) (pos : Nat) : Bool :=
-  if pos < input.length then
-    BracketExpr.isWordChar (input.toList[pos]!)
+/-- Check if a character at a position is a word character (using char array) -/
+def isWordCharAtArray (chars : Array Char) (pos : Nat) : Bool :=
+  if pos < chars.size then
+    BracketExpr.isWordChar (chars[pos]!)
   else
     false
+
+/-- Check if a character at a position is a word character -/
+def isWordCharAt (input : String) (pos : Nat) : Bool :=
+  isWordCharAtArray input.toList.toArray pos
 
 /-- Check if position is at a word boundary -/
 def isAtWordBoundary (input : String) (pos : Nat) : Bool :=
@@ -113,9 +117,12 @@ def findMatchAt (nfa : NFA) (input : String) (startPos : Nat) : Option Match := 
   if let some thread := findAcceptingThread nfa threads then
     lastMatch := some (thread, pos)
 
-  -- Process each character
-  let chars := input.toList.drop startPos
-  for c in chars do
+  -- Process each character using array indexing (toList.toArray computed once)
+  let chars := input.toList.toArray
+  let inputLen := chars.size
+
+  while pos < inputLen do
+    let c := chars[pos]!
     threads := step nfa threads c input pos
     pos := pos + 1
 
@@ -154,13 +161,15 @@ def findAll (nfa : NFA) (input : String) : List Match := Id.run do
   while pos <= input.length do
     match findMatchAt nfa input pos with
     | some m =>
-      results := results ++ [m]
+      -- Build list in reverse (O(1) prepend instead of O(n) append)
+      results := m :: results
       -- Advance past this match (but at least one character)
       pos := max (m.stop) (pos + 1)
     | none =>
       pos := pos + 1
 
-  results
+  -- Reverse to get correct order
+  results.reverse
 
 /-- Test if pattern matches anywhere in string -/
 def test (nfa : NFA) (input : String) : Bool :=
