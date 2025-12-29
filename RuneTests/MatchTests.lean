@@ -314,6 +314,137 @@ test "word boundary findAll" := do
   -- Actually: "the" at 0, and "the" at 10 in "theater" shouldn't match because it's not at word boundary
   results.length ≡ 1  -- Only the first "the"
 
+-- POSIX character class tests
+
+test "POSIX [:alpha:] class" := do
+  let re ← compile! "[[:alpha:]]+"
+  shouldSatisfy (re.test "hello") "should match letters"
+  shouldSatisfy (re.test "WORLD") "should match uppercase"
+  shouldSatisfy (!re.test "12345") "should not match digits only"
+  if let some m := re.find "123abc456" then
+    m.text ≡ "abc"
+
+test "POSIX [:digit:] class" := do
+  let re ← compile! "[[:digit:]]+"
+  shouldSatisfy (re.test "123") "should match digits"
+  shouldSatisfy (!re.test "abc") "should not match letters only"
+  if let some m := re.find "abc123def" then
+    m.text ≡ "123"
+
+test "POSIX [:alnum:] class" := do
+  let re ← compile! "[[:alnum:]]+"
+  shouldSatisfy (re.test "abc123") "should match alphanumeric"
+  shouldSatisfy (re.test "ABC") "should match letters"
+  shouldSatisfy (re.test "789") "should match digits"
+  shouldSatisfy (!re.test "!@#") "should not match punctuation only"
+  if let some m := re.find "---test123---" then
+    m.text ≡ "test123"
+
+test "POSIX [:lower:] class" := do
+  let re ← compile! "[[:lower:]]+"
+  shouldSatisfy (re.test "hello") "should match lowercase"
+  shouldSatisfy (!re.test "HELLO") "should not match uppercase"
+  shouldSatisfy (!re.test "123") "should not match digits"
+  if let some m := re.find "ABCdefGHI" then
+    m.text ≡ "def"
+
+test "POSIX [:upper:] class" := do
+  let re ← compile! "[[:upper:]]+"
+  shouldSatisfy (re.test "HELLO") "should match uppercase"
+  shouldSatisfy (!re.test "hello") "should not match lowercase"
+  if let some m := re.find "abcDEFghi" then
+    m.text ≡ "DEF"
+
+test "POSIX [:space:] class" := do
+  let re ← compile! "[[:space:]]+"
+  shouldSatisfy (re.test " ") "should match space"
+  shouldSatisfy (re.test "\t\n\r") "should match various whitespace"
+  shouldSatisfy (!re.test "abc") "should not match letters"
+  if let some m := re.find "hello world" then
+    m.text ≡ " "
+
+test "POSIX [:blank:] class" := do
+  let re ← compile! "[[:blank:]]+"
+  shouldSatisfy (re.test " ") "should match space"
+  shouldSatisfy (re.test "\t") "should match tab"
+  shouldSatisfy (!re.test "\n") "should not match newline"
+  shouldSatisfy (!re.test "abc") "should not match letters"
+
+test "POSIX [:punct:] class" := do
+  let re ← compile! "[[:punct:]]+"
+  shouldSatisfy (re.test "!@#") "should match punctuation"
+  shouldSatisfy (re.test ".,;:") "should match more punctuation"
+  shouldSatisfy (!re.test "abc") "should not match letters"
+  shouldSatisfy (!re.test "123") "should not match digits"
+  if let some m := re.find "hello, world!" then
+    m.text ≡ ","
+
+test "POSIX [:xdigit:] class" := do
+  let re ← compile! "[[:xdigit:]]+"
+  shouldSatisfy (re.test "0123456789") "should match decimal digits"
+  shouldSatisfy (re.test "abcdef") "should match lowercase hex"
+  shouldSatisfy (re.test "ABCDEF") "should match uppercase hex"
+  shouldSatisfy (re.test "DeadBeef") "should match mixed case hex"
+  shouldSatisfy (!re.test "ghij") "should not match non-hex letters"
+  -- Use non-hex prefix (only g-z, G-Z are not hex digits)
+  if let some m := re.find "just: #ff00aa" then
+    m.text ≡ "ff00aa"
+
+test "POSIX [:graph:] class" := do
+  let re ← compile! "[[:graph:]]+"
+  shouldSatisfy (re.test "abc123!@#") "should match visible chars"
+  shouldSatisfy (!re.test "   ") "should not match spaces only"
+  if let some m := re.find "  visible  " then
+    m.text ≡ "visible"
+
+test "POSIX [:print:] class" := do
+  let re ← compile! "[[:print:]]+"
+  shouldSatisfy (re.test "hello world") "should match printable including space"
+  shouldSatisfy (re.test "abc 123 !@#") "should match mixed printable"
+
+test "POSIX [:cntrl:] class" := do
+  let re ← compile! "[[:cntrl:]]+"
+  shouldSatisfy (re.test "\x00\x01\x02") "should match control chars"
+  shouldSatisfy (re.test "\x1F") "should match unit separator"
+  shouldSatisfy (!re.test "abc") "should not match letters"
+  shouldSatisfy (!re.test " ") "should not match space"
+
+test "POSIX negated class [^[:digit:]]" := do
+  let re ← compile! "[^[:digit:]]+"
+  shouldSatisfy (re.test "abc") "should match non-digits"
+  shouldSatisfy (!re.test "123") "should not match digits only"
+  if let some m := re.find "123abc456" then
+    m.text ≡ "abc"
+
+test "POSIX combined classes" := do
+  -- Match alpha or digit (like alnum but explicit)
+  let re ← compile! "[[:alpha:][:digit:]]+"
+  shouldSatisfy (re.test "abc123") "should match letters and digits"
+  shouldSatisfy (re.test "ABC") "should match letters"
+  shouldSatisfy (re.test "789") "should match digits"
+  if let some m := re.find "---test123---" then
+    m.text ≡ "test123"
+
+test "POSIX class with other elements" := do
+  -- Match alpha, underscore, or hyphen (like identifier with hyphens)
+  let re ← compile! "[[:alpha:]_-]+"
+  shouldSatisfy (re.test "hello-world") "should match with hyphen"
+  shouldSatisfy (re.test "my_var") "should match with underscore"
+  shouldSatisfy (re.test "kebab-case") "should match kebab-case"
+  if let some m := re.find "123 my-var 456" then
+    m.text ≡ "my-var"
+
+test "POSIX in complex pattern" := do
+  -- Match a simple identifier: starts with alpha, followed by alnum
+  let re ← compile! "[[:alpha:]][[:alnum:]]*"
+  shouldSatisfy (re.test "myVar123") "should match identifier"
+  -- Note: test/find finds matches anywhere, so "123abc" matches "abc"
+  -- Use isMatch for full string matching
+  shouldSatisfy (re.isMatch "123abc").isNone "should not full-match starting with digit"
+  shouldSatisfy (re.isMatch "myVar").isSome "should full-match valid identifier"
+  if let some m := re.find "  hello123  " then
+    m.text ≡ "hello123"
+
 #generate_tests
 
 end RuneTests.MatchTests
