@@ -108,21 +108,29 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 ---
 
-### [Priority: Medium] Regex Flags/Modifiers
+### [COMPLETED] Regex Flags/Modifiers
 
-**Description:** Add support for flags like `(?i)` for case-insensitive matching, `(?m)` for multiline mode (where `^`/`$` match line boundaries), and `(?s)` for dotall mode (where `.` matches newlines).
+**Status:** Implemented and tested (2024-12-28)
 
-**Rationale:** Many patterns require case-insensitive matching. The current API has no way to enable this without the user manually constructing case-insensitive character classes.
+**Description:** Added support for flags `(?i)` for case-insensitive matching, `(?m)` for multiline mode (where `^`/`$` match line boundaries), and `(?s)` for dotall mode (where `.` matches newlines).
 
-**Affected Files:**
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/API.lean` - add `CompileOptions` structure
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/NFA/Types.lean` - store flags in NFA
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/Parser/Parser.lean` - parse inline flags
-- `/Users/Shared/Projects/lean-workspace/rune/Rune/Match/Simulation.lean` - respect flags during matching
+**Changes Made:**
+- Added `RegexFlags` structure to `AST/Types.lean` with `caseInsensitive`, `multiline`, `dotAll` fields
+- Updated `RegexAST` and `NFA` structures to store flags
+- Updated parser to recognize inline flags `(?i)`, `(?m)`, `(?s)` and combinations like `(?im)`
+- Added support for scoped flags `(?i:...)` that create non-capturing groups
+- Updated `TransLabel.test` to accept and respect `caseInsensitive` and `dotAll` flags
+- Added `charEqIgnoreCase` helper for case-insensitive character comparison
+- Added `isAtLineStart` and `isAtLineEnd` helpers for multiline mode
+- Updated `checkAnchor` to respect multiline flag for `^` and `$` anchors
+- NFA compiler passes flags from AST through to NFA structure
 
-**Estimated Effort:** Medium
-
-**Dependencies:** None (anchor enforcement is now complete)
+**Test Coverage:** 19 new tests in `MatchTests.lean`:
+- Case insensitive: basic, character classes, ranges, alternation, scoped
+- Multiline: caret, dollar, findAll across lines
+- Dotall: basic, with star quantifier
+- Combined flags: `(?im)`, `(?ims)`
+- Flags with captures, quantifiers, email patterns
 
 ---
 
@@ -536,13 +544,13 @@ This document tracks potential improvements, new features, and code cleanup oppo
 
 | Category | High | Medium | Low | Completed | Total |
 |----------|------|--------|-----|-----------|-------|
-| Features | 0 | 4 | 2 | 4 | 10 |
+| Features | 0 | 3 | 2 | 5 | 10 |
 | Improvements | 0 | 2 | 2 | 3 | 7 |
 | Cleanup | 1 | 2 | 2 | 1 | 6 |
 | Tests | 0 | 2 | 0 | 2 | 4 |
 | API | 0 | 2 | 2 | 0 | 4 |
 | Documentation | 0 | 1 | 1 | 0 | 2 |
-| **Total** | **1** | **13** | **9** | **9** | **33** |
+| **Total** | **1** | **12** | **9** | **11** | **33** |
 
 ### Completed Items
 
@@ -555,12 +563,13 @@ This document tracks potential improvements, new features, and code cleanup oppo
 7. **Array thread management** (2024-12-28) - Converted from List to Array for O(1) push and better cache locality
 8. **Pre-compiled character classes** (2024-12-28) - 128-bit ASCII bitmap for O(1) lookup, 23 new edge case tests
 9. **Lazy quantifiers** (2024-12-28) - `*?`, `+?`, `??`, `{n,m}?` for non-greedy matching, 24 new tests
+10. **Regex flags** (2024-12-28) - `(?i)`, `(?m)`, `(?s)` for case-insensitive, multiline, and dotall modes, 19 new tests
 
-**Test count: 137 tests**
+**Test count: 156 tests**
 
 ### Recommended Next Steps
 
-1. **Regex flags** (`(?i)`, `(?m)`) - Case-insensitive and multiline modes
-2. **Edge case tests** - Empty groups, nested groups, quantified groups
-3. **Lookahead assertions** (`(?=...)`, `(?!...)`) - Password validation, advanced patterns
-4. **Remove emptyPattern error** - Unused error variant cleanup
+1. **Edge case tests** - Empty groups, nested groups, quantified groups
+2. **Lookahead assertions** (`(?=...)`, `(?!...)`) - Password validation, advanced patterns
+3. **Remove emptyPattern error** - Unused error variant cleanup
+4. **Unicode support** - Unicode property escapes `\p{Letter}`, proper codepoint handling

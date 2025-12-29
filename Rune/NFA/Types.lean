@@ -23,14 +23,26 @@ inductive TransLabel where
 
 namespace TransLabel
 
+/-- Case-insensitive character comparison -/
+@[inline]
+private def charEqIgnoreCase (a b : Char) : Bool :=
+  a == b || a.toLower == b.toLower
+
 /-- Check if a character matches this transition label -/
 @[inline]
-def test (label : TransLabel) (c : Char) : Bool :=
+def test (label : TransLabel) (c : Char) (caseInsensitive : Bool := false) (dotAll : Bool := false) : Bool :=
   match label with
   | .epsilon => false  -- Epsilon never matches a character
-  | .char x => c == x
-  | .charClass cc => cc.test c
-  | .dot => c != '\n'
+  | .char x =>
+    if caseInsensitive then charEqIgnoreCase c x else c == x
+  | .charClass cc =>
+    if caseInsensitive then
+      -- For case-insensitive, test both cases
+      cc.test c || cc.test c.toLower || cc.test c.toUpper
+    else
+      cc.test c
+  | .dot =>
+    if dotAll then true else c != '\n'
   | .anchorStart => false  -- Anchors never match characters
   | .anchorEnd => false
   | .wordBoundary => false
@@ -96,6 +108,9 @@ structure NFA where
   captureCount : Nat
   namedGroups : List (String × Nat)
   prefersShortestMatch : Bool := false  -- True if pattern has lazy quantifiers
+  caseInsensitive : Bool := false       -- (?i) flag
+  multiline : Bool := false             -- (?m) flag
+  dotAll : Bool := false                -- (?s) flag
   deriving Repr
 
 namespace NFA

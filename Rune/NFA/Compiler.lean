@@ -259,7 +259,10 @@ def compile (ast : RegexAST) : NFA :=
     accept := frag.accept,
     captureCount := ast.captureCount,
     namedGroups := ast.namedGroups,
-    prefersShortestMatch := finalState.hasLazyQuantifier
+    prefersShortestMatch := finalState.hasLazyQuantifier,
+    caseInsensitive := ast.flags.caseInsensitive,
+    multiline := ast.flags.multiline,
+    dotAll := ast.flags.dotAll
   }
 
 end Rune.NFA

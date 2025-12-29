@@ -116,11 +116,33 @@ partial def canMatchEmpty : Expr → Bool
 
 end Expr
 
+/-- Regex matching flags/modifiers -/
+structure RegexFlags where
+  caseInsensitive : Bool := false  -- (?i) - case-insensitive matching
+  multiline : Bool := false        -- (?m) - ^ and $ match line boundaries
+  dotAll : Bool := false           -- (?s) - . matches newlines
+  deriving Repr, BEq, Inhabited
+
+namespace RegexFlags
+
+/-- Default flags (all disabled) -/
+def default : RegexFlags := {}
+
+/-- Merge two flag sets (new flags override) -/
+def merge (base new : RegexFlags) : RegexFlags :=
+  { caseInsensitive := new.caseInsensitive || base.caseInsensitive
+  , multiline := new.multiline || base.multiline
+  , dotAll := new.dotAll || base.dotAll
+  }
+
+end RegexFlags
+
 /-- A parsed regex with metadata -/
 structure RegexAST where
   root : Expr
   captureCount : Nat                          -- Number of capture groups
   namedGroups : List (String × Nat)           -- Named group mappings
+  flags : RegexFlags := {}                    -- Global flags
   deriving Repr
 
 namespace RegexAST

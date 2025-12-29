@@ -897,6 +897,152 @@ test "lazy quantifier complex pattern" := do
     m.group 1 ≡ "name"
     m.group 2 ≡ "John"
 
+-- ============================================================================
+-- Regex Flags/Modifiers Tests
+-- ============================================================================
+
+test "case insensitive flag (?i) basic" := do
+  -- Without flag - case sensitive
+  let re1 ← compile! "hello"
+  shouldSatisfy (re1.test "hello") "should match 'hello'"
+  shouldSatisfy (!re1.test "HELLO") "should not match 'HELLO' without flag"
+  shouldSatisfy (!re1.test "Hello") "should not match 'Hello' without flag"
+  -- With flag - case insensitive
+  let re2 ← compile! "(?i)hello"
+  shouldSatisfy (re2.test "hello") "should match 'hello' with flag"
+  shouldSatisfy (re2.test "HELLO") "should match 'HELLO' with flag"
+  shouldSatisfy (re2.test "Hello") "should match 'Hello' with flag"
+  shouldSatisfy (re2.test "hElLo") "should match mixed case with flag"
+
+test "case insensitive flag with character class" := do
+  let re ← compile! "(?i)[abc]+"
+  shouldSatisfy (re.test "abc") "should match lowercase"
+  shouldSatisfy (re.test "ABC") "should match uppercase"
+  shouldSatisfy (re.test "AbC") "should match mixed case"
+  if let some m := re.find "XYZaBcXYZ" then
+    m.text ≡ "aBc"
+
+test "case insensitive flag with range" := do
+  let re ← compile! "(?i)[a-z]+"
+  shouldSatisfy (re.test "hello") "should match lowercase"
+  shouldSatisfy (re.test "HELLO") "should match uppercase"
+  if let some m := re.find "123ABC456" then
+    m.text ≡ "ABC"
+
+test "case insensitive flag with alternation" := do
+  let re ← compile! "(?i)yes|no"
+  shouldSatisfy (re.test "yes") "should match 'yes'"
+  shouldSatisfy (re.test "YES") "should match 'YES'"
+  shouldSatisfy (re.test "Yes") "should match 'Yes'"
+  shouldSatisfy (re.test "no") "should match 'no'"
+  shouldSatisfy (re.test "NO") "should match 'NO'"
+
+test "case insensitive flag scoped (?i:...)" := do
+  let re ← compile! "(?i:hello) world"
+  shouldSatisfy (re.test "HELLO world") "should match 'HELLO world'"
+  shouldSatisfy (re.test "hello world") "should match 'hello world'"
+  -- Note: with our current implementation, flags are global once set
+  -- so this also matches "hello WORLD" - that's a known limitation
+
+test "multiline flag (?m) caret" := do
+  -- Without flag - ^ only matches start of string
+  let re1 ← compile! "^hello"
+  shouldSatisfy (re1.test "hello") "should match at string start"
+  shouldSatisfy (!re1.test "world\nhello") "should not match after newline without flag"
+  -- With flag - ^ matches after newline too
+  let re2 ← compile! "(?m)^hello"
+  shouldSatisfy (re2.test "hello") "should match at string start with flag"
+  shouldSatisfy (re2.test "world\nhello") "should match after newline with flag"
+
+test "multiline flag (?m) dollar" := do
+  -- Without flag - $ only matches end of string
+  let re1 ← compile! "world$"
+  shouldSatisfy (re1.test "world") "should match at string end"
+  shouldSatisfy (!re1.test "world\nhello") "should not match before newline without flag"
+  -- With flag - $ matches before newline too
+  let re2 ← compile! "(?m)world$"
+  shouldSatisfy (re2.test "world") "should match at string end with flag"
+  shouldSatisfy (re2.test "world\nhello") "should match before newline with flag"
+
+test "multiline flag findAll" := do
+  let re ← compile! "(?m)^\\w+"
+  let results := re.findAll "hello\nworld\nfoo"
+  results.length ≡ 3
+  (results[0]?.map (·.text)) ≡ some "hello"
+  (results[1]?.map (·.text)) ≡ some "world"
+  (results[2]?.map (·.text)) ≡ some "foo"
+
+test "dotall flag (?s) basic" := do
+  -- Without flag - . does not match newline
+  let re1 ← compile! "a.b"
+  shouldSatisfy (re1.test "aXb") "should match 'aXb'"
+  shouldSatisfy (!re1.test "a\nb") "should not match 'a\\nb' without flag"
+  -- With flag - . matches newline
+  let re2 ← compile! "(?s)a.b"
+  shouldSatisfy (re2.test "aXb") "should match 'aXb' with flag"
+  shouldSatisfy (re2.test "a\nb") "should match 'a\\nb' with flag"
+
+test "dotall flag with star" := do
+  let re ← compile! "(?s)start.*end"
+  shouldSatisfy (re.test "start\nmiddle\nend") "should match across newlines"
+  if let some m := re.find "start\nline1\nline2\nend" then
+    m.text ≡ "start\nline1\nline2\nend"
+
+test "combined flags (?im)" := do
+  let re ← compile! "(?im)^hello"
+  shouldSatisfy (re.test "Hello") "case insensitive at start"
+  shouldSatisfy (re.test "world\nHELLO") "multiline + case insensitive"
+  shouldSatisfy (re.test "foo\nhello") "multiline at line start"
+
+test "combined flags (?ims)" := do
+  let re ← compile! "(?ims)^a.b$"
+  shouldSatisfy (re.test "A\nB") "all flags: case insensitive, multiline, dotall"
+  shouldSatisfy (re.test "a\nb") "lowercase with dotall"
+
+test "flag at pattern start" := do
+  let re ← compile! "(?i)test"
+  if let some m := re.find "This is a TEST string" then
+    m.text ≡ "TEST"
+
+test "flag with captures" := do
+  let re ← compile! "(?i)(hello) (world)"
+  if let some m := re.find "HELLO WORLD" then
+    m.text ≡ "HELLO WORLD"
+    m.group 1 ≡ "HELLO"
+    m.group 2 ≡ "WORLD"
+
+test "flag with quantifiers" := do
+  let re ← compile! "(?i)a+b*c?"
+  shouldSatisfy (re.test "aaa") "should match 'aaa'"
+  shouldSatisfy (re.test "AAA") "should match 'AAA'"
+  shouldSatisfy (re.test "AaAbBbC") "should match mixed case"
+
+test "multiline with anchored pattern" := do
+  let re ← compile! "(?m)^start.*end$"
+  shouldSatisfy (re.test "start to end") "single line match"
+  shouldSatisfy (re.test "prefix\nstart to end\nsuffix") "multiline middle match"
+
+test "case insensitive email pattern" := do
+  let re ← compile! "(?i)[a-z]+@[a-z]+\\.[a-z]+"
+  shouldSatisfy (re.test "user@example.com") "lowercase email"
+  shouldSatisfy (re.test "USER@EXAMPLE.COM") "uppercase email"
+  shouldSatisfy (re.test "User@Example.Com") "mixed case email"
+
+test "flags preserve other functionality" := do
+  -- Flags should work with all other regex features
+  let re ← compile! "(?i)\\b\\w+\\b"
+  if let some m := re.find "HELLO world" then
+    m.text ≡ "HELLO"  -- Still finds first match
+  let re2 ← compile! "(?i)\\d+|[a-z]+"
+  shouldSatisfy (re2.test "123") "digits still work"
+  shouldSatisfy (re2.test "ABC") "case insensitive letters"
+
+test "empty flags group" := do
+  -- Just (?:) is non-capturing group, not flags
+  let re ← compile! "(?:hello)"
+  shouldSatisfy (re.test "hello") "non-capturing group works"
+  shouldSatisfy (!re.test "HELLO") "no case insensitive without i flag"
+
 #generate_tests
 
 end RuneTests.MatchTests

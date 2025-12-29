@@ -30,11 +30,21 @@ def isAtWordBoundary (input : String) (pos : Nat) : Bool :=
   let currIsWord := isWordCharAt input pos
   prevIsWord != currIsWord
 
+/-- Check if position is at start of line (for multiline mode) -/
+def isAtLineStart (input : String) (pos : Nat) : Bool :=
+  pos == 0 || (pos > 0 && input.toList.getD (pos - 1) ' ' == '\n')
+
+/-- Check if position is at end of line (for multiline mode) -/
+def isAtLineEnd (input : String) (pos : Nat) : Bool :=
+  pos == input.length || input.toList.getD pos ' ' == '\n'
+
 /-- Check if an anchor condition is satisfied at the given position -/
-def checkAnchor (label : TransLabel) (input : String) (pos : Nat) : Bool :=
+def checkAnchor (label : TransLabel) (input : String) (pos : Nat) (multiline : Bool := false) : Bool :=
   match label with
-  | .anchorStart => pos == 0
-  | .anchorEnd => pos == input.length
+  | .anchorStart =>
+    if multiline then isAtLineStart input pos else pos == 0
+  | .anchorEnd =>
+    if multiline then isAtLineEnd input pos else pos == input.length
   | .wordBoundary => isAtWordBoundary input pos
   | .nonWordBoundary => !isAtWordBoundary input pos
   | _ => true  -- Non-anchor labels always pass
@@ -62,8 +72,8 @@ partial def epsilonClosure (nfa : NFA) (threads : Array Thread) (input : String)
       let mut hasCharTransition := false
       for t in state.transitions do
         if t.label.isZeroWidth then
-          -- Check anchor conditions before following
-          if checkAnchor t.label input pos then
+          -- Check anchor conditions before following (respecting multiline flag)
+          if checkAnchor t.label input pos nfa.multiline then
             let newThread := thread.applyCaptureOps t.captures pos
             worklist := worklist.push { newThread with stateId := t.target }
         else
@@ -84,7 +94,8 @@ def step (nfa : NFA) (threads : Array Thread) (c : Char) (input : String) (pos :
     | none => continue
     | some state =>
       for t in state.transitions do
-        if t.label.test c then
+        -- Pass caseInsensitive and dotAll flags to character matching
+        if t.label.test c nfa.caseInsensitive nfa.dotAll then
           let newThread := thread.applyCaptureOps t.captures pos
           nextThreads := nextThreads.push { newThread with stateId := t.target }
 

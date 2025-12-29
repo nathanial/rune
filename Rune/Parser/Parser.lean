@@ -14,6 +14,7 @@ structure ParserState where
   pos : Nat := 0
   captureCount : Nat := 0
   namedGroups : List (String × Nat) := []
+  flags : RegexFlags := {}
   deriving Repr
 
 /-- Parser monad -/
@@ -80,6 +81,37 @@ def newCaptureGroup : Parser Nat := do
 /-- Register a named group -/
 def registerNamedGroup (name : String) (idx : Nat) : Parser Unit := do
   modify fun s => { s with namedGroups := s.namedGroups ++ [(name, idx)] }
+
+/-- Set a flag -/
+def setFlag (flag : Char) : Parser Unit := do
+  modify fun s =>
+    let f := s.flags
+    match flag with
+    | 'i' => { s with flags := { f with caseInsensitive := true } }
+    | 'm' => { s with flags := { f with multiline := true } }
+    | 's' => { s with flags := { f with dotAll := true } }
+    | _ => s
+
+/-- Check if a character is a flag character -/
+def isFlagChar (c : Char) : Bool :=
+  c == 'i' || c == 'm' || c == 's'
+
+/-- Parse a sequence of flag characters, returns the flags parsed -/
+def parseFlags : Parser RegexFlags := do
+  let mut flags : RegexFlags := {}
+  while true do
+    match ← peek? with
+    | some 'i' =>
+      discard next
+      flags := { flags with caseInsensitive := true }
+    | some 'm' =>
+      discard next
+      flags := { flags with multiline := true }
+    | some 's' =>
+      discard next
+      flags := { flags with dotAll := true }
+    | _ => break
+  return flags
 
 /-- Check if a character is a metacharacter -/
 def isMetaChar (c : Char) : Bool :=
@@ -351,43 +383,92 @@ mutual
     let pos ← Parser.getPos
     Parser.expect '('
     -- Check for special group syntax
-    let kind ←
-      if ← Parser.tryChar '?' then
+    if ← Parser.tryChar '?' then
+      match ← Parser.peek? with
+      | some ':' =>
+        -- Non-capturing group (?:...)
+        discard Parser.next
+        let inner ← parseRegex
         match ← Parser.peek? with
-        | some ':' =>
+        | some ')' =>
           discard Parser.next
-          pure GroupKind.nonCapturing
-        | some '<' =>
-          discard Parser.next
-          -- Named group (?<name>...)
-          let mut name := ""
-          while true do
-            let c ← Parser.peek
-            if c == '>' then
-              discard Parser.next
-              break
-            if !c.isAlphanum && c != '_' then
-              throw (.invalidGroupName pos name)
-            name := name.push c
-            discard Parser.next
-          if name.isEmpty then
-            throw (.invalidGroupName pos name)
-          let idx ← Parser.newCaptureGroup
-          Parser.registerNamedGroup name idx
-          pure (GroupKind.named name idx)
+          return .group GroupKind.nonCapturing inner
         | _ =>
-          throw (.unexpectedEnd "group specifier")
-      else
+          throw (.unbalancedParens pos)
+      | some '<' =>
+        -- Named group (?<name>...)
+        discard Parser.next
+        let mut name := ""
+        while true do
+          let c ← Parser.peek
+          if c == '>' then
+            discard Parser.next
+            break
+          if !c.isAlphanum && c != '_' then
+            throw (.invalidGroupName pos name)
+          name := name.push c
+          discard Parser.next
+        if name.isEmpty then
+          throw (.invalidGroupName pos name)
         let idx ← Parser.newCaptureGroup
-        pure (GroupKind.capturing idx)
-    -- Parse inner expression
-    let inner ← parseRegex
-    match ← Parser.peek? with
-    | some ')' =>
-      discard Parser.next
-      return .group kind inner
-    | _ =>
-      throw (.unbalancedParens pos)
+        Parser.registerNamedGroup name idx
+        let inner ← parseRegex
+        match ← Parser.peek? with
+        | some ')' =>
+          discard Parser.next
+          return .group (GroupKind.named name idx) inner
+        | _ =>
+          throw (.unbalancedParens pos)
+      | some c =>
+        if Parser.isFlagChar c then
+          -- Flag group: (?i), (?im), (?i:...), etc.
+          let flags ← Parser.parseFlags
+          match ← Parser.peek? with
+          | some ')' =>
+            -- (?i) - set global flags
+            discard Parser.next
+            for flag in ['i', 'm', 's'] do
+              if flag == 'i' && flags.caseInsensitive then
+                Parser.setFlag 'i'
+              else if flag == 'm' && flags.multiline then
+                Parser.setFlag 'm'
+              else if flag == 's' && flags.dotAll then
+                Parser.setFlag 's'
+            return .empty
+          | some ':' =>
+            -- (?i:...) - scoped flags (non-capturing group)
+            -- For simplicity, we set global flags (not truly scoped)
+            discard Parser.next
+            for flag in ['i', 'm', 's'] do
+              if flag == 'i' && flags.caseInsensitive then
+                Parser.setFlag 'i'
+              else if flag == 'm' && flags.multiline then
+                Parser.setFlag 'm'
+              else if flag == 's' && flags.dotAll then
+                Parser.setFlag 's'
+            let inner ← parseRegex
+            match ← Parser.peek? with
+            | some ')' =>
+              discard Parser.next
+              return .group GroupKind.nonCapturing inner
+            | _ =>
+              throw (.unbalancedParens pos)
+          | _ =>
+            throw (.unexpectedEnd "flag group")
+        else
+          throw (.unexpectedEnd "group specifier")
+      | none =>
+        throw (.unexpectedEnd "group specifier")
+    else
+      -- Capturing group (...)
+      let idx ← Parser.newCaptureGroup
+      let inner ← parseRegex
+      match ← Parser.peek? with
+      | some ')' =>
+        discard Parser.next
+        return .group (GroupKind.capturing idx) inner
+      | _ =>
+        throw (.unbalancedParens pos)
 end
 
 /-- Parse a regex pattern string -/
@@ -405,6 +486,7 @@ def parse (pattern : String) : Except ParseError RegexAST := do
         root := expr
         captureCount := finalState.captureCount
         namedGroups := finalState.namedGroups
+        flags := finalState.flags
       }
   | .error e => .error e
 
